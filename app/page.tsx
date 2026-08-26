@@ -14,33 +14,10 @@ type GuestCode = {
   revokedAt?: string;
 };
 
-const STORAGE_KEY = "gatey-demo-codes-v1";
-
 function endOfDay(date: Date) {
   const result = new Date(date);
   result.setHours(23, 59, 59, 999);
   return result;
-}
-
-function initialCodes(): GuestCode[] {
-  const now = new Date();
-  const weekEnd = endOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 6));
-  return [
-    {
-      id: "demo-susan",
-      label: "Susan",
-      pin: "482716",
-      startsAt: new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
-      endsAt: endOfDay(now).toISOString(),
-    },
-    {
-      id: "demo-gardener",
-      label: "Gardener",
-      pin: "193584",
-      startsAt: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
-      endsAt: weekEnd.toISOString(),
-    },
-  ];
 }
 
 function getState(code: GuestCode, now = new Date()): CodeState {
@@ -76,17 +53,6 @@ function codeTiming(code: GuestCode, state: CodeState) {
   return sameDay
     ? `Until tonight at ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(end)}`
     : `Until ${formatDateTime(code.endsAt, end.getFullYear() !== today.getFullYear())}`;
-}
-
-function generatePin(existingPins: string[]) {
-  const blocked = /(000|111|222|333|444|555|666|777|888|999|123|234|345|456|567|678|789)/;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const values = new Uint32Array(1);
-    crypto.getRandomValues(values);
-    const pin = String(100000 + (values[0] % 900000));
-    if (!blocked.test(pin) && !existingPins.includes(pin)) return pin;
-  }
-  throw new Error("Could not generate a code. Please try again.");
 }
 
 function toLocalInputValue(date: Date) {
@@ -144,21 +110,15 @@ export default function Home() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const loadSavedCodes = window.setTimeout(() => {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        setCodes(saved ? JSON.parse(saved) : initialCodes());
-      } catch {
-        setCodes(initialCodes());
-      }
-      setReady(true);
-    }, 0);
-    return () => window.clearTimeout(loadSavedCodes);
+    fetch("/api/credentials")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load your guest codes.");
+        return response.json() as Promise<{ credentials: GuestCode[] }>;
+      })
+      .then(({ credentials }) => setCodes(credentials))
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your guest codes."))
+      .finally(() => setReady(true));
   }, []);
-
-  useEffect(() => {
-    if (ready) localStorage.setItem(STORAGE_KEY, JSON.stringify(codes));
-  }, [codes, ready]);
 
   const grouped = useMemo(() => {
     const active: GuestCode[] = [];
@@ -183,7 +143,7 @@ export default function Home() {
     setView("create");
   }
 
-  function createCode(event: FormEvent) {
+  async function createCode(event: FormEvent) {
     event.preventDefault();
     const now = new Date();
     let startsAt = now;
@@ -204,13 +164,14 @@ export default function Home() {
     }
 
     try {
-      const code: GuestCode = {
-        id: crypto.randomUUID(),
-        label: label.trim() || "Guest",
-        pin: generatePin(codes.map((item) => item.pin)),
-        startsAt: startsAt.toISOString(),
-        endsAt: endsAt.toISOString(),
-      };
+      const response = await fetch("/api/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: label.trim() || "Guest", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }),
+      });
+      const result = await response.json() as { credential?: GuestCode; error?: string };
+      if (!response.ok || !result.credential) throw new Error(result.error || "Could not create the guest code.");
+      const code = result.credential;
       setCodes((current) => [code, ...current]);
       setCreatedCode(code);
       setView("success");
@@ -234,10 +195,18 @@ export default function Home() {
     }
   }
 
-  function confirmCancel() {
+  async function confirmCancel() {
     if (!cancelTarget) return;
-    setCodes((current) => current.map((code) => code.id === cancelTarget.id ? { ...code, revokedAt: new Date().toISOString() } : code));
-    setCancelTarget(null);
+    try {
+      const response = await fetch(`/api/credentials/${cancelTarget.id}`, { method: "DELETE" });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not cancel the guest code.");
+      setCodes((current) => current.map((code) => code.id === cancelTarget.id ? { ...code, revokedAt: new Date().toISOString() } : code));
+      setCancelTarget(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not cancel the guest code.");
+      setCancelTarget(null);
+    }
   }
 
   const now = new Date();
@@ -270,7 +239,7 @@ export default function Home() {
           )}
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="primary-action form-submit" type="submit">Create code</button>
-          <p className="demo-note">Demo mode: this creates a code on this device only. UniFi is not connected yet.</p>
+          <p className="demo-note">This code is created in UniFi and can be found here again later.</p>
         </form>
       </main>
     );
