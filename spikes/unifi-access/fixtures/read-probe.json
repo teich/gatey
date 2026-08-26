@@ -1,0 +1,933 @@
+{
+  "baseUrl": "[redacted]",
+  "results": [
+    {
+      "path": "/api/v1/developer/doors",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "body": {
+        "code": "[redacted]",
+        "data": [
+          {
+            "door_lock_relay_status": "lock",
+            "door_position_status": "close",
+            "extras": {},
+            "floor_id": "5a5f366f-d49b-49a3-9f9e-92cd74a03387",
+            "full_name": "[redacted]",
+            "id": "f633b97b-7c50-4e69-bb8c-cdbe6a18baf6",
+            "is_bind_hub": true,
+            "name": "[redacted]",
+            "type": "door"
+          },
+          {
+            "door_lock_relay_status": "lock",
+            "door_position_status": "close",
+            "extras": {
+              "door_thumbnail": "/preview/reader_84784832c712_7c4495b8-e343-4280-aba2-466171661a02_1787765301.jpg",
+              "door_thumbnail_last_update": 1787765301
+            },
+            "floor_id": "5a5f366f-d49b-49a3-9f9e-92cd74a03387",
+            "full_name": "[redacted]",
+            "id": "7c4495b8-e343-4280-aba2-466171661a02",
+            "is_bind_hub": true,
+            "name": "[redacted]",
+            "type": "door"
+          }
+        ],
+        "msg": "success"
+      }
+    },
+    {
+      "path": "/api/v1/developer/openapi.json",
+      "status": 404,
+      "contentType": "application/json; charset=utf-8",
+      "body": {
+        "code": "[redacted]",
+        "codeS": "[redacted]",
+        "msg": "The API was not found.",
+        "error": "you entered no-man zone"
+      }
+    },
+    {
+      "path": "/api/v1/developer/swagger.json",
+      "status": 404,
+      "contentType": "application/json; charset=utf-8",
+      "body": {
+        "code": "[redacted]",
+        "codeS": "[redacted]",
+        "msg": "The API was not found.",
+        "error": "you entered no-man zone"
+      }
+    },
+    {
+      "path": "/api/v1/developer/visitors",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "body": {
+        "code": "[redacted]",
+        "data": [
+          {
+            "avatar": "",
+            "create_time": 1773017279,
+            "email": "[redacted]",
+            "end_time": 3035433599,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "5f5d649d-d94a-4fec-b2e8-361f7cd27a26",
+            "inviter_id": "bcec18b8-aa5d-4b27-a529-11bc61748f15",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "pin_code": "[redacted]",
+            "remarks": "[redacted]",
+            "resources": [
+              {
+                "id": "22ba1924-6749-45f1-ba8e-d2c9cd4304e9",
+                "name": "[redacted]",
+                "type": "door_group"
+              }
+            ],
+            "schedule": {
+              "holiday_group": {
+                "description": "",
+                "holidays": [],
+                "id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+                "is_default": true,
+                "is_private": false,
+                "name": "[redacted]",
+                "template_name": "[redacted]"
+              },
+              "holiday_group_id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+              "holiday_schedule": [],
+              "id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "access",
+              "weekly": {
+                "friday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "monday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "saturday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "sunday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "thursday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "tuesday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "wednesday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ]
+              }
+            },
+            "schedule_id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+            "start_time": 1772956800,
+            "status": "UPCOMING",
+            "timezone": "",
+            "visit_reason": "Interview",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1770929493,
+            "email": "[redacted]",
+            "end_time": 1928822399,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "85021b31-a22c-48bd-a1b5-48e4d0b7b3da",
+            "inviter_id": "bcec18b8-aa5d-4b27-a529-11bc61748f15",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "pin_code": "[redacted]",
+            "remarks": "[redacted]",
+            "resources": [
+              {
+                "id": "1650087e-8873-4fbb-89f0-e4fae7908e31",
+                "name": "[redacted]",
+                "type": "door_group"
+              }
+            ],
+            "schedule": {
+              "holiday_group": {
+                "description": "",
+                "holidays": [],
+                "id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+                "is_default": true,
+                "is_private": false,
+                "name": "[redacted]",
+                "template_name": "[redacted]"
+              },
+              "holiday_group_id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+              "holiday_schedule": [],
+              "id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "access",
+              "weekly": {
+                "friday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "monday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "saturday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "sunday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "thursday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "tuesday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "wednesday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ]
+              }
+            },
+            "schedule_id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+            "start_time": 1770883200,
+            "status": "UPCOMING",
+            "timezone": "",
+            "visit_reason": "Business",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1787765559,
+            "email": "[redacted]",
+            "end_time": 1787766159,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "1d3f0c9b-ef59-4016-83a9-cd199d6e15b5",
+            "inviter_id": "",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "pin_code": "[redacted]",
+            "remarks": "[redacted]",
+            "resources": [
+              {
+                "id": "47136177-deeb-43a3-bc4b-25a22c9476f8",
+                "name": "[redacted]",
+                "type": "door_group"
+              }
+            ],
+            "schedule": {
+              "holiday_group": null,
+              "holiday_group_id": "",
+              "holiday_schedule": [],
+              "id": "",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "",
+              "weekly": null
+            },
+            "schedule_id": "",
+            "start_time": 1787765499,
+            "status": "UPCOMING",
+            "timezone": "",
+            "visit_reason": "Others",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1771353423,
+            "email": "[redacted]",
+            "end_time": 1834559999,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "83f92560-7a6d-44c9-9f26-763e329a2722",
+            "inviter_id": "0592bbfb-b82e-4845-90ce-f1957e29b378",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "pin_code": "[redacted]",
+            "remarks": "[redacted]",
+            "resources": [
+              {
+                "id": "18a4c30a-3cd3-4fd9-8bb1-1563f24bd8d2",
+                "name": "[redacted]",
+                "type": "door_group"
+              }
+            ],
+            "schedule": {
+              "holiday_group": {
+                "description": "",
+                "holidays": [],
+                "id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+                "is_default": true,
+                "is_private": false,
+                "name": "[redacted]",
+                "template_name": "[redacted]"
+              },
+              "holiday_group_id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+              "holiday_schedule": [],
+              "id": "a63f0450-39b8-45cc-9f05-35c50341c226",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "access",
+              "weekly": {
+                "friday": [
+                  {
+                    "end_time": "18:00:00",
+                    "start_time": "07:00:00"
+                  }
+                ],
+                "monday": [
+                  {
+                    "end_time": "18:00:00",
+                    "start_time": "07:00:00"
+                  }
+                ],
+                "saturday": [],
+                "sunday": [],
+                "thursday": [
+                  {
+                    "end_time": "18:00:00",
+                    "start_time": "07:00:00"
+                  }
+                ],
+                "tuesday": [
+                  {
+                    "end_time": "18:00:00",
+                    "start_time": "07:00:00"
+                  }
+                ],
+                "wednesday": [
+                  {
+                    "end_time": "18:00:00",
+                    "start_time": "07:00:00"
+                  }
+                ]
+              }
+            },
+            "schedule_id": "a63f0450-39b8-45cc-9f05-35c50341c226",
+            "start_time": 1771315200,
+            "status": "UPCOMING",
+            "timezone": "",
+            "visit_reason": "Others",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1771016561,
+            "email": "[redacted]",
+            "end_time": 2370758340,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "9a5073e1-95e0-4430-b3c1-b28a3ce8d78f",
+            "inviter_id": "bcec18b8-aa5d-4b27-a529-11bc61748f15",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "pin_code": "[redacted]",
+            "remarks": "[redacted]",
+            "resources": [
+              {
+                "id": "1650087e-8873-4fbb-89f0-e4fae7908e31",
+                "name": "[redacted]",
+                "type": "door_group"
+              }
+            ],
+            "schedule": {
+              "holiday_group": {
+                "description": "",
+                "holidays": [],
+                "id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+                "is_default": true,
+                "is_private": false,
+                "name": "[redacted]",
+                "template_name": "[redacted]"
+              },
+              "holiday_group_id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+              "holiday_schedule": [],
+              "id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "access",
+              "weekly": {
+                "friday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "monday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "saturday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "sunday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "thursday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "tuesday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "wednesday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ]
+              }
+            },
+            "schedule_id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+            "start_time": 1770969600,
+            "status": "UPCOMING",
+            "timezone": "",
+            "visit_reason": "Interview",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1770929711,
+            "email": "[redacted]",
+            "end_time": 2212819199,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "90f1bc9a-7fd4-4eb7-84b3-fe076b9597d7",
+            "inviter_id": "bcec18b8-aa5d-4b27-a529-11bc61748f15",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "pin_code": "[redacted]",
+            "remarks": "[redacted]",
+            "resources": [
+              {
+                "id": "1650087e-8873-4fbb-89f0-e4fae7908e31",
+                "name": "[redacted]",
+                "type": "door_group"
+              }
+            ],
+            "schedule": {
+              "holiday_group": {
+                "description": "",
+                "holidays": [],
+                "id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+                "is_default": true,
+                "is_private": false,
+                "name": "[redacted]",
+                "template_name": "[redacted]"
+              },
+              "holiday_group_id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+              "holiday_schedule": [],
+              "id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "access",
+              "weekly": {
+                "friday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "monday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "saturday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "sunday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "thursday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "tuesday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "wednesday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ]
+              }
+            },
+            "schedule_id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+            "start_time": 1770883200,
+            "status": "UPCOMING",
+            "timezone": "",
+            "visit_reason": "Business",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1775491013,
+            "email": "[redacted]",
+            "end_time": 2260853940,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "231ac09e-e767-4717-bd9e-0a78a2f52eb9",
+            "inviter_id": "bcec18b8-aa5d-4b27-a529-11bc61748f15",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "remarks": "[redacted]",
+            "resources": [
+              {
+                "id": "f888cf39-9c40-433d-9528-c38dcb1914b8",
+                "name": "[redacted]",
+                "type": "door_group"
+              }
+            ],
+            "schedule": {
+              "holiday_group": {
+                "description": "",
+                "holidays": [],
+                "id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+                "is_default": true,
+                "is_private": false,
+                "name": "[redacted]",
+                "template_name": "[redacted]"
+              },
+              "holiday_group_id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+              "holiday_schedule": [],
+              "id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "access",
+              "weekly": {
+                "friday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "monday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "saturday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "sunday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "thursday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "tuesday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ],
+                "wednesday": [
+                  {
+                    "end_time": "23:59:59",
+                    "start_time": "00:00:00"
+                  }
+                ]
+              }
+            },
+            "schedule_id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+            "start_time": 1775458800,
+            "status": "UPCOMING",
+            "timezone": "",
+            "visit_reason": "Interview",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1787764833,
+            "email": "[redacted]",
+            "end_time": 1787764833791,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "4ca7e5fe-0d0a-45fa-9cab-e5ad61019c81",
+            "inviter_id": "",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "pin_code": "[redacted]",
+            "remarks": "[redacted]",
+            "resources": [],
+            "schedule": {
+              "holiday_group": {
+                "description": "",
+                "holidays": [],
+                "id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+                "is_default": true,
+                "is_private": false,
+                "name": "[redacted]",
+                "template_name": "[redacted]"
+              },
+              "holiday_group_id": "",
+              "holiday_schedule": [],
+              "id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "access",
+              "weekly": null
+            },
+            "schedule_id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+            "start_time": 1787764833191,
+            "status": "CANCELLED",
+            "timezone": "",
+            "visit_reason": "Gatey UniFi capability probe",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1787764948,
+            "email": "[redacted]",
+            "end_time": 1787764889213,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "d6be7b04-aecd-45e9-97ac-0dca03f07755",
+            "inviter_id": "",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "pin_code": "[redacted]",
+            "remarks": "[redacted]",
+            "resources": [],
+            "schedule": {
+              "holiday_group": {
+                "description": "",
+                "holidays": [],
+                "id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+                "is_default": true,
+                "is_private": false,
+                "name": "[redacted]",
+                "template_name": "[redacted]"
+              },
+              "holiday_group_id": "",
+              "holiday_schedule": [],
+              "id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "access",
+              "weekly": null
+            },
+            "schedule_id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+            "start_time": 1787764888553,
+            "status": "CANCELLED",
+            "timezone": "",
+            "visit_reason": "Gatey UniFi capability probe",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1787765504,
+            "email": "[redacted]",
+            "end_time": 1787765445601,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "a2550b38-8a89-4989-82bb-5674c82e9c51",
+            "inviter_id": "",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "remarks": "[redacted]",
+            "resources": [],
+            "schedule": {
+              "holiday_group": null,
+              "holiday_group_id": "",
+              "holiday_schedule": [],
+              "id": "",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "",
+              "weekly": null
+            },
+            "schedule_id": "",
+            "start_time": 1787765444941,
+            "status": "CANCELLED",
+            "timezone": "",
+            "visit_reason": "Others",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1780627642,
+            "email": "[redacted]",
+            "end_time": 1782543599,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "fc0f6fe0-4a9f-489d-85d4-b3b5c342b9ed",
+            "inviter_id": "bcec18b8-aa5d-4b27-a529-11bc61748f15",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "remarks": "[redacted]",
+            "resources": [
+              {
+                "id": "6f571917-4cb5-44d7-ad23-36aa9eca6bcf",
+                "name": "[redacted]",
+                "type": "door_group"
+              }
+            ],
+            "schedule": {
+              "holiday_group": {
+                "description": "",
+                "holidays": [],
+                "id": "5d23193d-92a5-4828-aa39-083cebcb16f6",
+                "is_default": true,
+                "is_private": false,
+                "name": "[redacted]",
+                "template_name": "[redacted]"
+              },
+              "holiday_group_id": "",
+              "holiday_schedule": [],
+              "id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "access",
+              "weekly": null
+            },
+            "schedule_id": "58dbed3d-f528-47e9-a3ae-d3ff8985e335",
+            "start_time": 1780556400,
+            "status": "NO_VISIT",
+            "timezone": "",
+            "visit_reason": "Interview",
+            "visitor_company": "[redacted]"
+          },
+          {
+            "avatar": "",
+            "create_time": 1787525225,
+            "email": "[redacted]",
+            "end_time": 1787554799,
+            "first_name": "[redacted]",
+            "has_qr_code": "[redacted]",
+            "id": "a940c5ec-b78b-477b-a419-119cbe9d3159",
+            "inviter_id": "0592bbfb-b82e-4845-90ce-f1957e29b378",
+            "inviter_name": "[redacted]",
+            "last_name": "[redacted]",
+            "license_plates": [],
+            "location_id": "",
+            "mobile_phone": "[redacted]",
+            "nfc_cards": [],
+            "remarks": "[redacted]",
+            "resources": [
+              {
+                "id": "2b98c7b9-495c-4796-b6cf-b93c42c7e055",
+                "name": "[redacted]",
+                "type": "door_group"
+              }
+            ],
+            "schedule": {
+              "holiday_group": null,
+              "holiday_group_id": "",
+              "holiday_schedule": [],
+              "id": "",
+              "is_default": false,
+              "name": "[redacted]",
+              "type": "",
+              "weekly": null
+            },
+            "schedule_id": "",
+            "start_time": 1787525209,
+            "status": "NO_VISIT",
+            "timezone": "",
+            "visit_reason": "Others",
+            "visitor_company": "[redacted]"
+          }
+        ],
+        "msg": "succ",
+        "pagination": {
+          "page_num": 1,
+          "page_size": 12,
+          "total": 12
+        }
+      }
+    },
+    {
+      "path": "/api/v1/developer/credentials/pin_codes",
+      "status": 404,
+      "contentType": "application/json; charset=utf-8",
+      "body": {
+        "code": "[redacted]",
+        "codeS": "[redacted]",
+        "msg": "The API was not found.",
+        "error": "you entered no-man zone"
+      }
+    },
+    {
+      "path": "/api/v1/developer/door_groups/topology",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "body": {
+        "code": "[redacted]",
+        "data": [
+          {
+            "id": "1650087e-8873-4fbb-89f0-e4fae7908e31",
+            "name": "[redacted]",
+            "resource_topologies": [
+              {
+                "id": "5a5f366f-d49b-49a3-9f9e-92cd74a03387",
+                "name": "[redacted]",
+                "resources": [
+                  {
+                    "id": "7c4495b8-e343-4280-aba2-466171661a02",
+                    "is_bind_hub": false,
+                    "name": "[redacted]",
+                    "type": "door"
+                  }
+                ],
+                "type": "floor"
+              }
+            ],
+            "type": "building"
+          }
+        ],
+        "msg": "success"
+      }
+    },
+    {
+      "path": "/api/v1/developer/visitor_schedules",
+      "status": 404,
+      "contentType": "application/json; charset=utf-8",
+      "body": {
+        "code": "[redacted]",
+        "codeS": "[redacted]",
+        "msg": "The API was not found.",
+        "error": "you entered no-man zone"
+      }
+    },
+    {
+      "path": "/api/v1/developer/visitor-schedules",
+      "status": 404,
+      "contentType": "application/json; charset=utf-8",
+      "body": {
+        "code": "[redacted]",
+        "codeS": "[redacted]",
+        "msg": "The API was not found.",
+        "error": "you entered no-man zone"
+      }
+    }
+  ]
+}

@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "spike:unifi": "node --env-file-if-exists=.env spikes/unifi-access/probe.mjs",
+    "spike:unifi:visitor": "node --env-file-if-exists=.env spikes/unifi-access/visitor-lifecycle.mjs"
   },
   "dependencies": {
     "next": "16.3.3",
