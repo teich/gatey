@@ -96,14 +96,18 @@ export function managedVisitorPins(): Map<string, string> {
 }
 
 export function saveVisitorPin(input: { visitorId: string; label: string; pin: string }) {
-  db.prepare(`
-    INSERT INTO visitor_pins (controller_visitor_id, household_id, label, pin, replaced_at)
-    VALUES (?, 'oren-home', ?, ?, ?)
-    ON CONFLICT(controller_visitor_id) DO UPDATE SET
-      label = excluded.label,
-      pin = excluded.pin,
-      replaced_at = excluded.replaced_at
-  `).run(input.visitorId, input.label, input.pin, new Date().toISOString());
+  const replacedAt = new Date().toISOString();
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO visitor_pins (controller_visitor_id, household_id, label, pin, replaced_at)
+      VALUES (?, 'oren-home', ?, ?, ?)
+      ON CONFLICT(controller_visitor_id) DO UPDATE SET
+        label = excluded.label,
+        pin = excluded.pin,
+        replaced_at = excluded.replaced_at
+    `).run(input.visitorId, input.label, input.pin, replacedAt);
+    db.prepare("UPDATE credentials SET pin = ? WHERE controller_visitor_id = ? AND household_id = 'oren-home'").run(input.pin, input.visitorId);
+  })();
 }
 
 export function managedPersonPins(): Map<string, string> {

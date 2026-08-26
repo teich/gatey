@@ -7,6 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "sync:prod-db": "bash scripts/sync-prod-db.sh",
     "spike:unifi": "node --env-file-if-exists=.env spikes/unifi-access/probe.mjs",
     "spike:unifi:visitor": "node --env-file-if-exists=.env spikes/unifi-access/visitor-lifecycle.mjs"
   },
