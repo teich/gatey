@@ -161,3 +161,18 @@ export async function listUserInventory(): Promise<UserInventoryItem[]> {
     hasNfcCard: Boolean(user.nfc_cards?.length),
   })).sort((left, right) => left.name.localeCompare(right.name));
 }
+
+export async function replaceUserPin(userId: string): Promise<string> {
+  const pin = await request<string>("/credentials/pin_codes", { method: "POST" });
+  await request<null>(`/users/${encodeURIComponent(userId)}/pin_codes`, { method: "DELETE" });
+  try {
+    await request<null>(`/users/${encodeURIComponent(userId)}/pin_codes`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin_code: pin }),
+    });
+  } catch (error) {
+    throw new Error(`The old PIN was removed, but UniFi could not assign the new PIN: ${error instanceof Error ? error.message : "Unknown error"}`);
+  }
+  return pin;
+}

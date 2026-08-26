@@ -1,7 +1,7 @@
 import "server-only";
 
 import Database from "better-sqlite3";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Credential, CredentialState } from "@/lib/credentials";
 
@@ -23,7 +23,10 @@ const db = globalForDb.gateyDb ?? new Database(databasePath);
 if (process.env.NODE_ENV !== "production") globalForDb.gateyDb = db;
 
 db.pragma("journal_mode = WAL");
-db.exec(readFileSync(join(process.cwd(), "db", "migrations", "001_initial.sql"), "utf8"));
+const migrationsDirectory = join(process.cwd(), "db", "migrations");
+for (const migration of readdirSync(migrationsDirectory).filter((file) => file.endsWith(".sql")).sort()) {
+  db.exec(readFileSync(join(migrationsDirectory, migration), "utf8"));
+}
 db.pragma("optimize");
 
 function mapCredential(row: CredentialRow): Credential {
@@ -81,6 +84,22 @@ export function getControllerVisitorId(id: string): string | undefined {
 export function managedVisitorIds(): Set<string> {
   const rows = db.prepare("SELECT controller_visitor_id FROM credentials WHERE household_id = 'oren-home'").all() as Array<{ controller_visitor_id: string }>;
   return new Set(rows.map((row) => row.controller_visitor_id));
+}
+
+export function managedPersonPins(): Map<string, string> {
+  const rows = db.prepare("SELECT controller_user_id, pin FROM person_pins WHERE household_id = 'oren-home'").all() as Array<{ controller_user_id: string; pin: string }>;
+  return new Map(rows.map((row) => [row.controller_user_id, row.pin]));
+}
+
+export function savePersonPin(input: { userId: string; label: string; pin: string }) {
+  db.prepare(`
+    INSERT INTO person_pins (controller_user_id, household_id, label, pin, replaced_at)
+    VALUES (?, 'oren-home', ?, ?, ?)
+    ON CONFLICT(controller_user_id) DO UPDATE SET
+      label = excluded.label,
+      pin = excluded.pin,
+      replaced_at = excluded.replaced_at
+  `).run(input.userId, input.label, input.pin, new Date().toISOString());
 }
 
 export function markRevoked(id: string) {

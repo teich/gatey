@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { managedVisitorIds } from "@/lib/db";
+import { ReplacePinButton } from "@/app/admin/replace-pin-button";
+import { managedPersonPins, managedVisitorIds } from "@/lib/db";
 import { listUserInventory, listVisitorInventory } from "@/lib/unifi-access";
 
 export const dynamic = "force-dynamic";
@@ -18,15 +19,16 @@ export default async function AdminPage() {
   let visitors;
   let users;
   let managed;
+  let personPins;
   let errorMessage: string | undefined;
 
   try {
-    [visitors, users, managed] = await Promise.all([listVisitorInventory(), listUserInventory(), Promise.resolve(managedVisitorIds())]);
+    [visitors, users, managed, personPins] = await Promise.all([listVisitorInventory(), listUserInventory(), Promise.resolve(managedVisitorIds()), Promise.resolve(managedPersonPins())]);
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : "Could not read visitors from UniFi Access.";
   }
 
-  if (errorMessage || !visitors || !users || !managed) {
+  if (errorMessage || !visitors || !users || !managed || !personPins) {
     return <main className="admin-shell"><header className="admin-header"><div><p className="eyebrow">Gatey admin</p><h1>Visitor inventory</h1></div><Link className="admin-home-link" href="/">Resident view</Link></header><section className="admin-empty"><h2>UniFi inventory unavailable</h2><p>{errorMessage ?? "Could not read visitors from UniFi Access."}</p></section></main>;
   }
 
@@ -39,7 +41,7 @@ export default async function AdminPage() {
         <Link className="admin-home-link" href="/">Resident view</Link>
       </header>
       <section className="admin-intro"><p>Read-only view of what UniFi Access currently has. People are long-term access accounts; visitors are time-bound passes. Nothing here changes a person, visitor, or code.</p><div className="inventory-counts"><span><strong>{users.length}</strong> people in UniFi</span><span><strong>{visitors.length}</strong> visitors in UniFi</span><span><strong>{unmanaged}</strong> visitors not yet managed by Gatey</span></div></section>
-      <section className="inventory-section" aria-labelledby="people-heading"><div className="inventory-section-heading"><p className="eyebrow">Long-term access</p><h2 id="people-heading">People</h2></div>{users.length === 0 ? <section className="admin-empty"><p>UniFi returned no people.</p></section> : <section className="visitor-list" aria-label="UniFi people">{users.map((user) => <article className="visitor-row" key={user.id}><div className="visitor-title"><div><h3>{user.name}</h3><p className={`inventory-status ${user.status.toLowerCase()}`}>{labelStatus(user.status)}</p></div><span className="existing-badge">UniFi person</span></div><dl className="visitor-details"><div><dt>PIN</dt><dd>{user.hasPin ? "Assigned" : "No PIN"}</dd></div><div><dt>NFC card</dt><dd>{user.hasNfcCard ? "Assigned" : "No card"}</dd></div><div className="visitor-locations"><dt>Access policies</dt><dd>{user.policyNames.length ? user.policyNames.join(", ") : "No policy assigned"}</dd></div></dl><p className="visitor-id">UniFi ID: {user.id}</p></article>)}</section>}</section>
+      <section className="inventory-section" aria-labelledby="people-heading"><div className="inventory-section-heading"><p className="eyebrow">Long-term access</p><h2 id="people-heading">People</h2></div>{users.length === 0 ? <section className="admin-empty"><p>UniFi returned no people.</p></section> : <section className="visitor-list" aria-label="UniFi people">{users.map((user) => { const storedPin = personPins.get(user.id); return <article className="visitor-row" key={user.id}><div className="visitor-title"><div><h3>{user.name}</h3><p className={`inventory-status ${user.status.toLowerCase()}`}>{labelStatus(user.status)}</p></div><span className="existing-badge">UniFi person</span></div><dl className="visitor-details"><div><dt>PIN</dt><dd>{user.hasPin ? "Assigned" : "No PIN"}</dd></div><div><dt>NFC card</dt><dd>{user.hasNfcCard ? "Assigned" : "No card"}</dd></div><div className="visitor-locations"><dt>Access policies</dt><dd>{user.policyNames.length ? user.policyNames.join(", ") : "No policy assigned"}</dd></div></dl><p className="stored-pin">Gatey PIN: <strong>{storedPin ?? "Not yet stored by Gatey"}</strong></p><ReplacePinButton userId={user.id} name={user.name} /><p className="visitor-id">UniFi ID: {user.id}</p></article>; })}</section>}</section>
       <section className="inventory-section" aria-labelledby="visitors-heading"><div className="inventory-section-heading"><p className="eyebrow">Time-bound access</p><h2 id="visitors-heading">Visitors</h2></div>{visitors.length === 0 ? <section className="admin-empty"><p>UniFi returned an empty visitor list.</p></section> : <section className="visitor-list" aria-label="UniFi visitor inventory">{visitors.map((visitor) => {
         const isManaged = managed.has(visitor.id);
         return <article className="visitor-row" key={visitor.id}>

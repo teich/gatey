@@ -145,6 +145,14 @@ button { -webkit-tap-highlight-color: transparent; }
 .visitor-details dd { margin: 0; font-size: 14px; line-height: 1.4; }
 .visitor-details .visitor-locations { grid-column: 1 / -1; }
 .visitor-id { margin: 19px 0 0; color: #8a918a; font-family: ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.stored-pin { margin: 19px 0 0; color: var(--forest-dark); font-size: 14px; }
+.stored-pin strong, .new-pin strong { font-family: ui-monospace, monospace; letter-spacing: .08em; }
+.pin-replacement { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 15px; }
+.replace-pin-button { min-height: 42px; padding: 0 14px; border: 1px solid #b9812e; border-radius: 11px; background: #fff8ec; color: #805719; font-weight: 800; cursor: pointer; }
+.replace-pin-button:disabled { cursor: wait; opacity: .7; }
+.new-pin, .replace-pin-error { margin: 0; font-size: 14px; }
+.new-pin { color: var(--forest-dark); font-weight: 700; }
+.replace-pin-error { color: var(--danger); font-weight: 700; }
 .admin-empty { margin-top: 32px; padding: 34px 24px; border: 1px dashed #c8c6bd; border-radius: 18px; text-align: center; }
 .admin-empty h2 { margin: 0 0 9px; font-size: 20px; }
 .admin-empty p { max-width: 540px; margin: 0 auto; color: var(--muted); line-height: 1.5; }
