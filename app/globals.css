@@ -124,10 +124,14 @@ button { -webkit-tap-highlight-color: transparent; }
 .inventory-counts { display: flex; flex-wrap: wrap; gap: 11px; }
 .inventory-counts span { padding: 8px 11px; border-radius: 10px; background: #eaf0e5; color: #46564b; font-size: 14px; }
 .inventory-counts strong { color: var(--forest-dark); }
+.inventory-section { margin-top: 38px; }
+.inventory-section-heading { margin-bottom: 15px; }
+.inventory-section-heading .eyebrow { margin: 0 0 5px; }
+.inventory-section-heading h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 28px; font-weight: 500; letter-spacing: -.02em; }
 .visitor-list { display: grid; gap: 13px; }
 .visitor-row { padding: 22px; border: 1px solid var(--line); border-radius: 18px; background: var(--card); }
 .visitor-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
-.visitor-title h2 { margin: 0 0 7px; font-size: 20px; }
+.visitor-title h2, .visitor-title h3 { margin: 0 0 7px; font-size: 20px; }
 .inventory-status { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--muted); font-size: 14px; font-weight: 750; text-transform: capitalize; }
 .inventory-status::before { width: 8px; height: 8px; border-radius: 50%; background: #8b928b; content: ""; }
 .inventory-status.active::before, .inventory-status.visiting::before { background: #3f8b65; }

@@ -18,6 +18,18 @@ type UnifiVisitor = {
   resources?: Array<{ name?: string; type?: string }>;
 };
 
+type UnifiUser = {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  alias?: string;
+  status?: string;
+  pin_code?: { token?: string } | null;
+  access_policies?: Array<{ name?: string }>;
+  nfc_cards?: unknown[];
+};
+
 export type VisitorInventoryItem = {
   id: string;
   name: string;
@@ -27,6 +39,15 @@ export type VisitorInventoryItem = {
   hasPin: boolean;
   recurring: boolean;
   resources: string[];
+};
+
+export type UserInventoryItem = {
+  id: string;
+  name: string;
+  status: string;
+  hasPin: boolean;
+  policyNames: string[];
+  hasNfcCard: boolean;
 };
 
 function config() {
@@ -127,4 +148,16 @@ export async function listVisitorInventory(): Promise<VisitorInventoryItem[]> {
     recurring: Boolean(visitor.schedule),
     resources: (visitor.resources || []).map((resource) => resource.name || resource.type || "Unnamed location"),
   })).sort((left, right) => (right.endsAt || "").localeCompare(left.endsAt || ""));
+}
+
+export async function listUserInventory(): Promise<UserInventoryItem[]> {
+  const users = await request<UnifiUser[]>("/users?page_num=1&page_size=100&expand[]=access_policy");
+  return users.map((user) => ({
+    id: user.id,
+    name: user.full_name || user.alias || [user.first_name, user.last_name].filter(Boolean).join(" ") || "Unnamed person",
+    status: user.status || "UNKNOWN",
+    hasPin: Boolean(user.pin_code?.token),
+    policyNames: (user.access_policies || []).map((policy) => policy.name || "Unnamed policy"),
+    hasNfcCard: Boolean(user.nfc_cards?.length),
+  })).sort((left, right) => left.name.localeCompare(right.name));
 }
