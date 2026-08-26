@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ReplacePinButton } from "@/app/admin/replace-pin-button";
+import { ManagePinButton } from "@/app/admin/replace-pin-button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { managedPersonPins, managedVisitorIds } from "@/lib/db";
+import { managedPersonPins, managedVisitorIds, managedVisitorPins } from "@/lib/db";
 import { listUserInventory, listVisitorInventory } from "@/lib/unifi-access";
 
 export const dynamic = "force-dynamic";
@@ -20,21 +20,23 @@ export default async function AdminPage() {
   let visitors;
   let users;
   let managedVisitors;
+  let visitorPins;
   let personPins;
   let errorMessage: string | undefined;
 
   try {
-    [visitors, users, managedVisitors, personPins] = await Promise.all([
+    [visitors, users, managedVisitors, visitorPins, personPins] = await Promise.all([
       listVisitorInventory(),
       listUserInventory(),
       Promise.resolve(managedVisitorIds()),
+      Promise.resolve(managedVisitorPins()),
       Promise.resolve(managedPersonPins()),
     ]);
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : "Could not read UniFi Access.";
   }
 
-  if (errorMessage || !visitors || !users || !managedVisitors || !personPins) {
+  if (errorMessage || !visitors || !users || !managedVisitors || !visitorPins || !personPins) {
     return <main className="admin-shell"><header className="admin-header"><div><p className="eyebrow">Gatey admin</p><h1>Access inventory</h1></div><Link className="admin-home-link" href="/">Resident view</Link></header><section className="admin-empty"><h2>UniFi inventory unavailable</h2><p>{errorMessage ?? "Could not read UniFi Access."}</p></section></main>;
   }
 
@@ -53,15 +55,16 @@ export default async function AdminPage() {
         <div className="inventory-section-heading"><p className="eyebrow">Long-term access</p><h2 id="people-heading">People</h2></div>
         {users.length === 0 ? <section className="admin-empty"><p>UniFi returned no people.</p></section> : <div className="admin-table-shell"><Table><TableHeader><TableRow><TableHead>Person</TableHead><TableHead>PIN</TableHead><TableHead>Gatey PIN</TableHead><TableHead>Access policies</TableHead><TableHead>Card</TableHead><TableHead className="admin-actions-head">Action</TableHead></TableRow></TableHeader><TableBody>{users.map((user) => {
           const storedPin = personPins.get(user.id);
-          return <TableRow key={user.id}><TableCell><strong>{user.name}</strong><span className={`inventory-status ${user.status.toLowerCase()}`}>{labelStatus(user.status)}</span></TableCell><TableCell>{user.hasPin ? "Assigned" : "No PIN"}</TableCell><TableCell>{storedPin ? <strong className="table-pin">{storedPin}</strong> : "Not yet stored"}</TableCell><TableCell className="policy-cell">{user.policyNames.length ? user.policyNames.join(", ") : "No policy assigned"}</TableCell><TableCell>{user.hasNfcCard ? "Assigned" : "No card"}</TableCell><TableCell><ReplacePinButton userId={user.id} name={user.name} hasPin={user.hasPin} /></TableCell></TableRow>;
+          return <TableRow key={user.id}><TableCell><strong>{user.name}</strong><span className={`inventory-status ${user.status.toLowerCase()}`}>{labelStatus(user.status)}</span></TableCell><TableCell>{user.hasPin ? "Assigned" : "No PIN"}</TableCell><TableCell>{storedPin ? <strong className="table-pin">{storedPin}</strong> : "Not yet stored"}</TableCell><TableCell className="policy-cell">{user.policyNames.length ? user.policyNames.join(", ") : "No policy assigned"}</TableCell><TableCell>{user.hasNfcCard ? "Assigned" : "No card"}</TableCell><TableCell><ManagePinButton endpoint={`/api/people/${encodeURIComponent(user.id)}/replace-pin`} name={user.name} hasPin={user.hasPin} /></TableCell></TableRow>;
         })}</TableBody></Table></div>}
       </section>
 
       <section className="inventory-section" aria-labelledby="visitors-heading">
         <div className="inventory-section-heading"><p className="eyebrow">Time-bound access</p><h2 id="visitors-heading">Visitors</h2></div>
-        {currentVisitors.length === 0 ? <section className="admin-empty"><p>No current visitors.</p></section> : <div className="admin-table-shell"><Table><TableHeader><TableRow><TableHead>Visitor</TableHead><TableHead>PIN</TableHead><TableHead>Visit type</TableHead><TableHead>Starts</TableHead><TableHead>Ends</TableHead><TableHead>Location</TableHead><TableHead>Source</TableHead></TableRow></TableHeader><TableBody>{currentVisitors.map((visitor) => {
+        {currentVisitors.length === 0 ? <section className="admin-empty"><p>No current visitors.</p></section> : <div className="admin-table-shell"><Table><TableHeader><TableRow><TableHead>Visitor</TableHead><TableHead>PIN</TableHead><TableHead>Gatey PIN</TableHead><TableHead>Visit type</TableHead><TableHead>Starts</TableHead><TableHead>Ends</TableHead><TableHead>Source</TableHead><TableHead className="admin-actions-head">Action</TableHead></TableRow></TableHeader><TableBody>{currentVisitors.map((visitor) => {
           const isManaged = managedVisitors.has(visitor.id);
-          return <TableRow key={visitor.id}><TableCell><strong>{visitor.name}</strong><span className={`inventory-status ${visitor.status.toLowerCase()}`}>{labelStatus(visitor.status)}</span></TableCell><TableCell>{visitor.hasPin ? "Assigned" : "No PIN"}</TableCell><TableCell>{visitor.recurring ? "Recurring" : "One time"}</TableCell><TableCell>{formatDate(visitor.startsAt)}</TableCell><TableCell>{formatDate(visitor.endsAt)}</TableCell><TableCell className="policy-cell">{visitor.resources.length ? visitor.resources.join(", ") : "None assigned"}</TableCell><TableCell><span className={isManaged ? "managed-badge" : "existing-badge"}>{isManaged ? "Gatey" : "UniFi"}</span></TableCell></TableRow>;
+          const storedPin = visitorPins.get(visitor.id);
+          return <TableRow key={visitor.id}><TableCell><strong>{visitor.name}</strong><span className={`inventory-status ${visitor.status.toLowerCase()}`}>{labelStatus(visitor.status)}</span></TableCell><TableCell>{visitor.hasPin ? "Assigned" : "No PIN"}</TableCell><TableCell>{storedPin ? <strong className="table-pin">{storedPin}</strong> : "Not yet stored"}</TableCell><TableCell>{visitor.recurring ? "Recurring" : "One time"}</TableCell><TableCell>{formatDate(visitor.startsAt)}</TableCell><TableCell>{formatDate(visitor.endsAt)}</TableCell><TableCell><span className={isManaged ? "managed-badge" : "existing-badge"}>{isManaged ? "Gatey" : "UniFi"}</span></TableCell><TableCell><ManagePinButton endpoint={`/api/visitors/${encodeURIComponent(visitor.id)}/replace-pin`} name={visitor.name} hasPin={visitor.hasPin} /></TableCell></TableRow>;
         })}</TableBody></Table></div>}
       </section>
     </main>

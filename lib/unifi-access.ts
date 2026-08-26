@@ -195,3 +195,27 @@ export async function replaceUserPin(userId: string, requestedPin?: string): Pro
   }
   return pin;
 }
+
+export async function replaceVisitorPin(visitorId: string, requestedPin?: string): Promise<string> {
+  if (requestedPin) {
+    await request<null>(`/visitors/${encodeURIComponent(visitorId)}/pin_codes`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin_code: requestedPin }),
+    });
+    return requestedPin;
+  }
+
+  const pin = await request<string>("/credentials/pin_codes", { method: "POST" });
+  await request<null>(`/visitors/${encodeURIComponent(visitorId)}/pin_codes`, { method: "DELETE" });
+  try {
+    await request<null>(`/visitors/${encodeURIComponent(visitorId)}/pin_codes`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin_code: pin }),
+    });
+  } catch (error) {
+    throw new Error(`The old PIN was removed, but UniFi could not assign the new PIN: ${error instanceof Error ? error.message : "Unknown error"}`);
+  }
+  return pin;
+}

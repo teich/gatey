@@ -86,6 +86,26 @@ export function managedVisitorIds(): Set<string> {
   return new Set(rows.map((row) => row.controller_visitor_id));
 }
 
+export function managedVisitorPins(): Map<string, string> {
+  const rows = db.prepare(`
+    SELECT controller_visitor_id AS id, pin FROM credentials WHERE household_id = 'oren-home'
+    UNION ALL
+    SELECT controller_visitor_id AS id, pin FROM visitor_pins WHERE household_id = 'oren-home'
+  `).all() as Array<{ id: string; pin: string }>;
+  return new Map(rows.map((row) => [row.id, row.pin]));
+}
+
+export function saveVisitorPin(input: { visitorId: string; label: string; pin: string }) {
+  db.prepare(`
+    INSERT INTO visitor_pins (controller_visitor_id, household_id, label, pin, replaced_at)
+    VALUES (?, 'oren-home', ?, ?, ?)
+    ON CONFLICT(controller_visitor_id) DO UPDATE SET
+      label = excluded.label,
+      pin = excluded.pin,
+      replaced_at = excluded.replaced_at
+  `).run(input.visitorId, input.label, input.pin, new Date().toISOString());
+}
+
 export function managedPersonPins(): Map<string, string> {
   const rows = db.prepare("SELECT controller_user_id, pin FROM person_pins WHERE household_id = 'oren-home'").all() as Array<{ controller_user_id: string; pin: string }>;
   return new Map(rows.map((row) => [row.controller_user_id, row.pin]));
