@@ -186,9 +186,9 @@ export default function Home() {
   }
 
   async function shareCode(code: GuestCode) {
-    const message = `${code.label}'s Oakview Gate code is ${spacedPin(code.pin)}. ${codeTiming(code, getState(code))}.`;
+    const message = `${code.label}'s Bennett Valley Gate code is ${spacedPin(code.pin)}. ${codeTiming(code, getState(code))}.`;
     if (navigator.share) {
-      try { await navigator.share({ title: "Oakview Gate code", text: message }); } catch { /* The share sheet was dismissed. */ }
+      try { await navigator.share({ title: "Bennett Valley Gate code", text: message }); } catch { /* The share sheet was dismissed. */ }
     } else {
       await navigator.clipboard.writeText(message);
       setCopiedId(code.id);
@@ -265,7 +265,7 @@ export default function Home() {
 
   return (
     <main className="app-shell">
-      <header className="topbar"><div><p className="eyebrow">Home</p><h1>Oakview Gate</h1></div><a className="avatar" href="/admin" aria-label="Open admin view">OS</a></header>
+      <header className="topbar"><div><p className="eyebrow">Home</p><h1>Bennett Valley Gate</h1></div><a className="admin-link" href="/admin">Admin</a></header>
       <section className="welcome" aria-labelledby="welcome-title"><p className="eyebrow">{today}</p><h2 id="welcome-title">{greeting}, Oren.</h2><p>Who are we welcoming today?</p><button className="primary-action" type="button" onClick={openCreate}><span aria-hidden="true">＋</span>Create guest code</button></section>
 
       {!ready ? <p className="loading">Finding your codes…</p> : (

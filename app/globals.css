@@ -26,7 +26,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .topbar, .code-card-top, .section-heading, .past-codes, .flow-header { display: flex; align-items: center; justify-content: space-between; }
 .topbar h1 { margin: 3px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 25px; font-weight: 600; letter-spacing: -.02em; }
 .eyebrow { margin: 0; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-.avatar { width: 46px; height: 46px; border: 1px solid rgba(31, 81, 61, .2); border-radius: 50%; background: #dfe8d8; color: var(--forest-dark); font-size: 14px; font-weight: 800; cursor: default; }
+.admin-link { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 0 14px; border: 1px solid rgba(31, 81, 61, .2); border-radius: 12px; background: #dfe8d8; color: var(--forest-dark); font-size: 14px; font-weight: 800; text-decoration: none; }
 
 .welcome { padding: 56px 2px 38px; }
 .welcome h2, .flow-intro h1, .success-shell h1 { margin: 10px 0 8px; font-family: Georgia, "Times New Roman", serif; font-weight: 500; line-height: .98; letter-spacing: -.045em; }
