@@ -7,8 +7,9 @@ A small, resident-first guest code app for Bennett Valley Gate. Gatey runs on Ne
 Gatey uses Better Auth with its Organization, Admin, and Username plugins:
 
 - A household is a Better Auth organization.
-- A person is a Better Auth user with an organization membership.
-- A visitor is a time-bound Gatey credential scoped by `household_id`.
+- A person is a UniFi person linked one-to-one with a Better Auth user. The
+  user's organization membership determines their household.
+- A visitor is a time-bound UniFi pass explicitly assigned to a household.
 - Every member of a household can list, create, and revoke that household's visitor credentials.
 - The Better Auth `admin` role is app-wide and separate from organization roles such as `owner` and `member`.
 
@@ -52,7 +53,7 @@ npm run auth:reset-admin-password
 
 ## Managing households
 
-Open **Admin → Households** to create and rename households, add or remove residents, and retire an empty household. Adding a new resident creates a username and one-time temporary password, then shows a message you can copy into your own email. Gatey does not send mail itself.
+Open **Admin → Households** to create and rename households, review residents, and retire an empty household. Use **Admin → People** to see everyone discovered in UniFi, link an existing Gatey account or create one, and assign the person to a household. Creating an account shows a one-time welcome message you can copy into your own email. Gatey does not send mail itself. Use **Admin → Visitors** to assign current visitor passes to households.
 
 People belong to one household in this MVP. Removing them preserves their account so the administrator can assign it again later. For safety, Gatey will not delete `oren-home`, a household with residents, or one with Gatey visitor/PIN records.
 

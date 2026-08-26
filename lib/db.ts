@@ -44,21 +44,34 @@ export function listCredentials(householdId: string): Credential[] {
 }
 
 export function insertCredential(householdId: string, credential: Credential, controllerVisitorId: string) {
-  database.prepare(`
-    INSERT INTO credentials (id, household_id, label, pin, starts_at, ends_at, controller_visitor_id, state, revoked_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    credential.id,
-    householdId,
-    credential.label,
-    credential.pin,
-    credential.startsAt,
-    credential.endsAt,
-    controllerVisitorId,
-    credential.state,
-    credential.revokedAt ?? null,
-    new Date().toISOString(),
-  );
+  const createdAt = new Date().toISOString();
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.prepare(`
+      INSERT INTO credentials (id, household_id, label, pin, starts_at, ends_at, controller_visitor_id, state, revoked_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      credential.id,
+      householdId,
+      credential.label,
+      credential.pin,
+      credential.startsAt,
+      credential.endsAt,
+      controllerVisitorId,
+      credential.state,
+      credential.revokedAt ?? null,
+      createdAt,
+    );
+    database.prepare(`
+      INSERT INTO visitor_households (controller_visitor_id, household_id, assigned_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(controller_visitor_id) DO UPDATE SET household_id = excluded.household_id
+    `).run(controllerVisitorId, householdId, createdAt);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function getControllerVisitorId(householdId: string, id: string): string | undefined {
@@ -94,6 +107,11 @@ export function saveVisitorPin(input: { householdId: string; visitorId: string; 
         replaced_at = excluded.replaced_at
     `).run(input.visitorId, input.householdId, input.label, input.pin, replacedAt);
     database.prepare("UPDATE credentials SET pin = ? WHERE controller_visitor_id = ? AND household_id = ?").run(input.pin, input.visitorId, input.householdId);
+    database.prepare(`
+      INSERT INTO visitor_households (controller_visitor_id, household_id, assigned_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(controller_visitor_id) DO UPDATE SET household_id = excluded.household_id
+    `).run(input.visitorId, input.householdId, replacedAt);
     database.exec("COMMIT");
   } catch (error) {
     database.exec("ROLLBACK");

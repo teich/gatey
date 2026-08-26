@@ -9,6 +9,7 @@ export type HouseholdMember = {
   email: string;
   username: string | null;
   role: string;
+  controllerUserId: string | null;
 };
 
 export type HouseholdAdminRecord = {
@@ -16,6 +17,7 @@ export type HouseholdAdminRecord = {
   name: string;
   slug: string;
   members: HouseholdMember[];
+  visitorCount: number;
 };
 
 type HouseholdRow = {
@@ -26,6 +28,11 @@ type HouseholdRow = {
 
 type MemberRow = HouseholdMember & {
   organizationId: string;
+};
+
+type VisitorCountRow = {
+  householdId: string;
+  visitorCount: number;
 };
 
 export function listHouseholds(): HouseholdAdminRecord[] {
@@ -42,11 +49,19 @@ export function listHouseholds(): HouseholdAdminRecord[] {
       member.role,
       user.name,
       user.email,
-      user.username
+      user.username,
+      unifi_person_links.controller_user_id AS controllerUserId
     FROM member
     INNER JOIN user ON user.id = member.userId
+    LEFT JOIN unifi_person_links ON unifi_person_links.user_id = user.id
     ORDER BY user.name COLLATE NOCASE, user.email COLLATE NOCASE
   `).all() as MemberRow[];
+  const visitorCounts = database.prepare(`
+    SELECT household_id AS householdId, count(*) AS visitorCount
+    FROM visitor_households
+    GROUP BY household_id
+  `).all() as VisitorCountRow[];
+  const visitorCountByHousehold = new Map(visitorCounts.map((row) => [row.householdId, row.visitorCount]));
 
   const membersByHousehold = new Map<string, HouseholdMember[]>();
   for (const member of members) {
@@ -58,6 +73,7 @@ export function listHouseholds(): HouseholdAdminRecord[] {
       email: member.email,
       username: member.username,
       role: member.role,
+      controllerUserId: member.controllerUserId,
     });
     membersByHousehold.set(member.organizationId, householdMembers);
   }
@@ -65,6 +81,7 @@ export function listHouseholds(): HouseholdAdminRecord[] {
   return households.map((household) => ({
     ...household,
     members: membersByHousehold.get(household.id) ?? [],
+    visitorCount: visitorCountByHousehold.get(household.id) ?? 0,
   }));
 }
 
@@ -100,9 +117,11 @@ export function getHouseholdMember(householdId: string, memberId: string): House
       member.role,
       user.name,
       user.email,
-      user.username
+      user.username,
+      unifi_person_links.controller_user_id AS controllerUserId
     FROM member
     INNER JOIN user ON user.id = member.userId
+    LEFT JOIN unifi_person_links ON unifi_person_links.user_id = user.id
     WHERE member.organizationId = ? AND member.id = ?
   `).get(householdId, memberId) as HouseholdMember | undefined;
   return member ?? null;
@@ -134,7 +153,8 @@ export function householdHasGateyRecords(householdId: string): boolean {
       SELECT 1 FROM credentials WHERE household_id = ?
       UNION ALL SELECT 1 FROM visitor_pins WHERE household_id = ?
       UNION ALL SELECT 1 FROM person_pins WHERE household_id = ?
+      UNION ALL SELECT 1 FROM visitor_households WHERE household_id = ?
     ) AS hasRecords
-  `).get(householdId, householdId, householdId) as { hasRecords: number };
+  `).get(householdId, householdId, householdId, householdId) as { hasRecords: number };
   return Boolean(row.hasRecords);
 }

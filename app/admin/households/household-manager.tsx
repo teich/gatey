@@ -1,13 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { HouseholdAdminRecord } from "@/lib/households";
-
-type Welcome = {
-  name: string;
-  message: string;
-};
 
 async function requestJson(url: string, init: RequestInit) {
   const response = await fetch(url, init);
@@ -22,7 +18,6 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
   const [newSlug, setNewSlug] = useState("");
   const [working, setWorking] = useState<string>();
   const [error, setError] = useState<string>();
-  const [welcome, setWelcome] = useState<Welcome>();
 
   async function createHousehold(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,33 +58,6 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
     }
   }
 
-  async function addPerson(event: FormEvent<HTMLFormElement>, household: HouseholdAdminRecord) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    setWorking(`person-${household.id}`);
-    setError(undefined);
-    try {
-      const result = await requestJson("/api/admin/households", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          householdId: household.id,
-          name: form.get("name"),
-          email: form.get("email"),
-          username: form.get("username"),
-        }),
-      }) as { welcomeMessage?: string; member?: { name?: string } };
-      formElement.reset();
-      if (result.welcomeMessage) setWelcome({ name: result.member?.name || "New resident", message: result.welcomeMessage });
-      router.refresh();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not add this person.");
-    } finally {
-      setWorking(undefined);
-    }
-  }
-
   async function removeMember(householdId: string, memberId: string, name: string) {
     if (!window.confirm(`Remove ${name} from this household? Their account will remain available for reassignment.`)) return;
     setWorking(`remove-${memberId}`);
@@ -118,13 +86,7 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
     }
   }
 
-  async function copyWelcomeMessage() {
-    if (!welcome) return;
-    await navigator.clipboard.writeText(welcome.message);
-  }
-
   return <>
-    <section className="household-intro"><p>Make a household, add residents, then copy their welcome message into the email you send them. Gatey does not send email itself.</p></section>
     <section className="household-create" aria-labelledby="new-household-heading">
       <div><p className="eyebrow">New household</p><h2 id="new-household-heading">Start a home</h2></div>
       <form className="household-form household-create-form" onSubmit={createHousehold}>
@@ -143,20 +105,14 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
           {household.id !== "oren-home" ? <button className="text-button danger" type="button" disabled={working === `delete-${household.id}`} onClick={() => void deleteHousehold(household)}>Delete household</button> : <span className="household-protected">Initial household</span>}
         </form>
         <div className="household-people">
-          <div><p className="eyebrow">Residents</p><h2>{household.members.length} {household.members.length === 1 ? "person" : "people"}</h2></div>
+          <div className="household-summary"><div><p className="eyebrow">At a glance</p><h2>{household.members.length} {household.members.length === 1 ? "person" : "people"}</h2></div><div className="household-summary-count"><strong>{household.visitorCount}</strong><span>{household.visitorCount === 1 ? "visitor pass" : "visitor passes"}</span></div></div>
           <ul className="household-member-list">
-            {household.members.map((member) => <li key={member.id}><div><strong>{member.name}</strong><span>{member.username ? `${member.username} · ` : ""}{member.email}</span></div><div className="household-member-actions">{member.role.split(",").includes("owner") ? null : <button className="text-button danger" type="button" disabled={working === `remove-${member.id}`} onClick={() => void removeMember(household.id, member.id, member.name)}>Remove</button>}</div></li>)}
+            {household.members.map((member) => <li key={member.id}><div><strong>{member.name}</strong><span>{member.username ? `${member.username} · ` : ""}{member.email}</span></div><div className="household-member-actions"><span className={member.controllerUserId ? "managed-badge" : "existing-badge"}>{member.controllerUserId ? "Linked to UniFi" : "Needs UniFi link"}</span>{member.role.split(",").includes("owner") ? null : <button className="text-button danger" type="button" disabled={working === `remove-${member.id}`} onClick={() => void removeMember(household.id, member.id, member.name)}>Remove</button>}</div></li>)}
+            {!household.members.length ? <li className="household-member-empty">No people assigned yet.</li> : null}
           </ul>
-          <form className="household-form person-form" onSubmit={(event) => void addPerson(event, household)}>
-            <p>Add a person</p>
-            <label>Name <span>Needed for a new account</span><input name="name" placeholder="Jamie Smith" /></label>
-            <label>Email<input name="email" type="email" placeholder="jamie@example.com" required /></label>
-            <label>Username <span>Needed for a new account</span><input name="username" placeholder="jamie" autoCapitalize="none" /></label>
-            <button className="primary-action" type="submit" disabled={working === `person-${household.id}`}>{working === `person-${household.id}` ? "Adding…" : "Add person"}</button>
-          </form>
+          <div className="household-assign-people"><p>People are discovered in UniFi first, then linked to their Gatey account and household.</p><Link className="admin-home-link" href="/admin/people">Assign people</Link></div>
         </div>
       </article>)}
     </section>
-    {welcome ? <div className="dialog-backdrop" role="presentation"><section className="dialog welcome-dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-message-title"><p className="eyebrow">Ready to send</p><h2 id="welcome-message-title">Welcome {welcome.name}</h2><p>Copy this and email it to them. The temporary password is only shown here.</p><textarea value={welcome.message} readOnly aria-label="Welcome message" /><div className="dialog-actions"><button className="primary-action" type="button" onClick={() => void copyWelcomeMessage()}>Copy message</button><button className="secondary-action" type="button" onClick={() => setWelcome(undefined)}>Done</button></div></section></div> : null}
   </>;
 }

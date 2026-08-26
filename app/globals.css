@@ -198,6 +198,8 @@ button { -webkit-tap-highlight-color: transparent; }
 .stored-pin strong, .new-pin strong { font-family: ui-monospace, monospace; letter-spacing: .08em; }
 .replace-pin-button { min-height: 42px; padding: 0 14px; border: 1px solid #b9812e; border-radius: 11px; background: #fff8ec; color: #805719; font-weight: 800; cursor: pointer; }
 .replace-pin-button:disabled { cursor: wait; opacity: .7; }
+.people-actions { display: flex; min-height: 42px; align-items: center; gap: 8px; white-space: nowrap; }
+.people-actions > button { height: 42px; min-height: 42px; padding: 0 14px; border-radius: 11px; font-size: 14px; font-weight: 750; line-height: 1; }
 .new-pin, .replace-pin-error { margin: 0; font-size: 14px; }
 .new-pin { color: var(--forest-dark); font-weight: 700; }
 .replace-pin-error { color: var(--danger); font-weight: 700; }
@@ -231,17 +233,32 @@ button { -webkit-tap-highlight-color: transparent; }
 .household-edit-form { grid-template-columns: minmax(160px, 1fr) minmax(130px, .6fr) auto auto; align-items: end; padding: 20px 22px; border-bottom: 1px solid var(--line); }
 .household-protected { align-self: center; color: var(--gatey-muted); font-size: 13px; font-weight: 700; }
 .household-people { padding: 22px; }
+.household-summary { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
+.household-summary-count { display: flex; align-items: baseline; gap: 7px; color: var(--gatey-muted); font-size: 13px; }
+.household-summary-count strong { color: var(--ink); font-size: 20px; }
 .household-member-list { display: grid; gap: 8px; margin: 18px 0 22px; padding: 0; list-style: none; }
 .household-member-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fffdfa; }
 .household-member-list strong, .household-member-list span { display: block; }
 .household-member-list span { margin-top: 3px; color: var(--gatey-muted); font-size: 13px; }
 .household-member-actions { display: flex; align-items: center; gap: 12px; }
 .household-member-actions .text-button { white-space: nowrap; }
+.household-member-empty { color: var(--gatey-muted); justify-content: center !important; border-style: dashed !important; }
+.household-assign-people { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.household-assign-people p { margin: 0; color: var(--gatey-muted); font-size: 14px; }
 .member-role { margin: 0 !important; padding: 3px 8px; border-radius: 999px; background: #e4ecdf; color: var(--forest-dark) !important; font-size: 12px !important; font-weight: 800; text-transform: capitalize; }
 .person-form { grid-template-columns: 1fr 1fr 1fr auto; align-items: end; padding-top: 18px; border-top: 1px solid var(--line); }
 .person-form > p { grid-column: 1 / -1; margin: 0; font-size: 15px; font-weight: 800; }
 .welcome-dialog { width: min(100% - 32px, 680px); }
 .welcome-dialog textarea { min-height: 250px; padding: 12px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.5; }
+
+.admin-assignment-dialog { width: min(100% - 32px, 560px); }
+.admin-assignment-form, .admin-assignment-fields { display: grid; gap: 14px; }
+.admin-assignment-form { margin-top: 22px; }
+.admin-assignment-form label, .admin-assignment-fields label { display: grid; gap: 6px; font-size: 13px; font-weight: 750; }
+.admin-assignment-form select, .admin-assignment-form input, .admin-compact-select, .admin-welcome-message { width: 100%; min-height: 42px; padding: 0 11px; border: 1px solid var(--input); border-radius: 9px; background: var(--background); color: var(--foreground); font: inherit; outline: none; }
+.admin-assignment-form select:focus, .admin-assignment-form input:focus, .admin-compact-select:focus, .admin-welcome-message:focus { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 22%, transparent); }
+.admin-welcome-message { min-height: 220px; padding: 11px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; }
+.admin-compact-select { min-height: 34px; font-size: 13px; }
 
 .auth-shell { display: grid; min-height: 100vh; padding: 24px; place-items: center; }
 .auth-card { width: min(100%, 430px); padding: clamp(28px, 7vw, 44px); border: 1px solid var(--line); border-radius: 24px; background: rgba(255, 253, 248, .94); box-shadow: 0 18px 55px rgba(30, 43, 35, .1); }
@@ -258,7 +275,7 @@ button { -webkit-tap-highlight-color: transparent; }
 
 button:focus-visible { outline: 3px solid #d09a42; outline-offset: 3px; }
 @media (min-width: 700px) { .app-shell { padding-top: 42px; } .flow-shell { padding-top: 28px; } }
-@media (max-width: 760px) { .household-create, .household-create-form, .household-edit-form, .person-form { grid-template-columns: 1fr; } .household-member-list li { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 760px) { .household-create, .household-create-form, .household-edit-form, .person-form { grid-template-columns: 1fr; } .household-member-list li { align-items: flex-start; flex-direction: column; } .household-member-actions { width: 100%; flex-wrap: wrap; } .household-assign-people { align-items: flex-start; flex-direction: column; } }
 @media (max-width: 390px) { .duration-options { grid-template-columns: 1fr; } .duration-options label { min-height: 72px; } .custom-dates, .success-actions { grid-template-columns: 1fr; } .text-button.danger { width: 100%; margin: 5px 0 0; text-align: left; } }
 @media (max-width: 620px) { .visitor-details { grid-template-columns: 1fr 1fr; } .visitor-details .visitor-locations { grid-column: 1 / -1; } .managed-badge, .existing-badge { white-space: normal; text-align: right; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }

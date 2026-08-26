@@ -1,7 +1,7 @@
-import { randomBytes } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { authorizeAdminRequest } from "@/lib/api-authorization";
 import { getUserByEmail, getUserHousehold, listHouseholds, removeCreatorFromHousehold } from "@/lib/households";
+import { buildWelcomeMessage, createTemporaryPassword } from "@/lib/welcome-message";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,15 +29,6 @@ function slugFrom(value: string) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 64);
-}
-
-function generatedPassword() {
-  return randomBytes(18).toString("base64url");
-}
-
-function welcomeMessage(input: { householdName: string; name: string; email: string; username: string; password: string }) {
-  const origin = process.env.BETTER_AUTH_URL || "http://localhost:3000";
-  return `Hi ${input.name},\n\nYou now have access to Gatey for ${input.householdName}.\n\nSign in: ${origin}/sign-in\nUsername: ${input.username}\nEmail: ${input.email}\nTemporary password: ${input.password}\n\nYou can create, view, and cancel your household's guest gate codes. If you need help or a password reset, reply to this email.`;
 }
 
 export async function GET(request: Request) {
@@ -109,7 +100,7 @@ export async function PUT(request: Request) {
 
     const name = cleanText(body.name, "Person's name");
     const username = cleanText(body.username, "Username", 3, 64);
-    const password = generatedPassword();
+    const password = createTemporaryPassword();
     const created = await auth.api.createUser({
       body: {
         email,
@@ -143,7 +134,7 @@ export async function PUT(request: Request) {
         email,
         username,
       },
-      welcomeMessage: welcomeMessage({ householdName: household.name, name, email, username, password }),
+      welcomeMessage: buildWelcomeMessage({ householdName: household.name, name, email, username, password }),
     }, { status: 201 });
   } catch (error) {
     return Response.json({ error: errorMessage(error, "Could not add this person to the household.") }, { status: 400 });

@@ -1,21 +1,14 @@
-import Link from "next/link";
 import { HouseholdManager } from "@/app/admin/households/household-manager";
 import { listHouseholds } from "@/lib/households";
-import { requirePageAdmin } from "@/lib/authorization";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default async function HouseholdAdminPage() {
-  await requirePageAdmin();
-
   return (
-    <main className="admin-shell household-admin-shell">
-      <header className="admin-header">
-        <div><p className="eyebrow">Gatey admin</p><h1>Households</h1></div>
-        <Link className="admin-home-link" href="/admin">Access inventory</Link>
-      </header>
+    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div><p className="text-sm font-medium text-muted-foreground">Residents and visitor passes</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Households</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">Create homes, review who belongs to them, and see whether every resident is linked to UniFi.</p></div>
       <HouseholdManager households={listHouseholds()} />
-    </main>
+    </div>
   );
 }

@@ -22,8 +22,9 @@ function hasGateyRecords(householdId: string) {
       SELECT 1 FROM credentials WHERE household_id = ?
       UNION ALL SELECT 1 FROM visitor_pins WHERE household_id = ?
       UNION ALL SELECT 1 FROM person_pins WHERE household_id = ?
+      UNION ALL SELECT 1 FROM visitor_households WHERE household_id = ?
     ) AS hasRecords
-  `).get(householdId, householdId, householdId) as { hasRecords: number };
+  `).get(householdId, householdId, householdId, householdId) as { hasRecords: number };
   return Boolean(row.hasRecords);
 }
 
