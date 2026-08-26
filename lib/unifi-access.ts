@@ -162,7 +162,16 @@ export async function listUserInventory(): Promise<UserInventoryItem[]> {
   })).sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export async function replaceUserPin(userId: string): Promise<string> {
+export async function replaceUserPin(userId: string, requestedPin?: string): Promise<string> {
+  if (requestedPin) {
+    await request<null>(`/users/${encodeURIComponent(userId)}/pin_codes`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin_code: requestedPin }),
+    });
+    return requestedPin;
+  }
+
   const pin = await request<string>("/credentials/pin_codes", { method: "POST" });
   await request<null>(`/users/${encodeURIComponent(userId)}/pin_codes`, { method: "DELETE" });
   try {
