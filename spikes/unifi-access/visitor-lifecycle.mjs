@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { Agent, request as httpsRequest } from "node:https";
+
 const host = process.env.UNIFI_HOST;
 const token = process.env.UNIFI_ACCESS_API_TOKEN;
 const port = process.env.UNIFI_ACCESS_PORT || "12445";
@@ -12,7 +14,7 @@ const minutesIndex = process.argv.indexOf("--minutes");
 const minutes = minutesIndex >= 0 ? Number(process.argv[minutesIndex + 1]) : 10;
 
 if (!host || !token) throw new Error("UNIFI_HOST and UNIFI_ACCESS_API_TOKEN are required.");
-if (insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+const insecureUnifiAgent = new Agent({ rejectUnauthorized: false });
 if (!create && !revokeId) throw new Error("Use --create or --revoke <visitor-id>.");
 if (create && revokeId) throw new Error("Use only one action at a time.");
 if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) throw new Error("--minutes must be an integer from 1 to 60.");
@@ -20,15 +22,38 @@ if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) throw new Error("
 const apiRoot = `https://${host}:${port}/api/v1/developer`;
 
 async function api(path, options = {}) {
-  const response = await fetch(`${apiRoot}${path}`, {
+  const response = await unifiFetch(`${apiRoot}${path}`, {
     ...options,
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(options.headers || {}) },
-  });
+  }, insecure);
   const body = await response.json().catch(() => ({}));
   if (!response.ok || !["SUCCESS", "OK"].includes(String(body.code || "").toUpperCase())) {
     throw new Error(`UniFi request failed (${response.status}): ${body.msg || body.message || body.code || "unknown error"}`);
   }
   return body;
+}
+
+async function unifiFetch(url, options, allowInsecureTls) {
+  if (!allowInsecureTls) return fetch(url, options);
+
+  return new Promise((resolve, reject) => {
+    const request = httpsRequest(url, {
+      method: options.method,
+      headers: options.headers,
+      agent: insecureUnifiAgent,
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => {
+        resolve(new Response(Buffer.concat(chunks), {
+          status: response.statusCode || 500,
+          headers: response.headers,
+        }));
+      });
+    });
+    request.on("error", reject);
+    request.end(options.body);
+  });
 }
 
 if (revokeId) {

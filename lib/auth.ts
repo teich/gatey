@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { admin, organization, username } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { database } from "./database.ts";
@@ -14,6 +15,17 @@ type CreatedUser = {
 };
 
 let addBootstrapOwner: (user: CreatedUser) => Promise<void> = async () => undefined;
+
+function hasGateyRecords(householdId: string) {
+  const row = database.prepare(`
+    SELECT EXISTS(
+      SELECT 1 FROM credentials WHERE household_id = ?
+      UNION ALL SELECT 1 FROM visitor_pins WHERE household_id = ?
+      UNION ALL SELECT 1 FROM person_pins WHERE household_id = ?
+    ) AS hasRecords
+  `).get(householdId, householdId, householdId) as { hasRecords: number };
+  return Boolean(row.hasRecords);
+}
 
 export const auth = betterAuth({
   database,
@@ -46,7 +58,18 @@ export const auth = betterAuth({
     }),
     organization({
       allowUserToCreateOrganization: (user) => String(user.role ?? "").split(",").includes("admin"),
-      disableOrganizationDeletion: true,
+      organizationHooks: {
+        beforeDeleteOrganization: async ({ organization, user }) => {
+          if (organization.id === BOOTSTRAP_HOUSEHOLD_ID) {
+            throw APIError.fromStatus("BAD_REQUEST", { message: "The initial Gatey household cannot be deleted." });
+          }
+          const otherMember = database.prepare("SELECT 1 FROM member WHERE organizationId = ? AND userId != ? LIMIT 1").get(organization.id, user.id);
+          if (otherMember) throw APIError.fromStatus("BAD_REQUEST", { message: "Remove the household's residents before deleting it." });
+          if (hasGateyRecords(organization.id)) {
+            throw APIError.fromStatus("BAD_REQUEST", { message: "This household has Gatey records and cannot be deleted." });
+          }
+        },
+      },
     }),
     admin(),
     nextCookies(),

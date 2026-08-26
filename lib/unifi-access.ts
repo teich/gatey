@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { Agent, request as httpsRequest } from "node:https";
 import type { Credential } from "@/lib/credentials";
 
 type ApiResponse<T> = { code?: string; data?: T; msg?: string; message?: string };
@@ -29,6 +30,8 @@ type UnifiUser = {
   access_policies?: Array<{ name?: string }>;
   nfc_cards?: unknown[];
 };
+
+const insecureUnifiAgent = new Agent({ rejectUnauthorized: false });
 
 export type VisitorInventoryItem = {
   id: string;
@@ -60,23 +63,49 @@ function config() {
   const host = process.env.UNIFI_HOST;
   const token = process.env.UNIFI_ACCESS_API_TOKEN;
   if (!host || !token) throw new Error("Gatey is missing its UniFi connection settings.");
-  if (["1", "true", "yes"].includes((process.env.UNIFI_INSECURE_TLS || "").toLowerCase())) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  }
   return {
     baseUrl: `https://${host}:${process.env.UNIFI_ACCESS_PORT || "12445"}/api/v1/developer`,
     token,
     doorName: (process.env.UNIFI_DOOR_NAME || "Gate").trim(),
+    insecureTls: ["1", "true", "yes"].includes((process.env.UNIFI_INSECURE_TLS || "").toLowerCase()),
   };
 }
 
+async function unifiFetch(url: string, init: RequestInit, insecureTls: boolean): Promise<Response> {
+  if (!insecureTls) return fetch(url, init);
+
+  const body = init.body;
+  if (body && typeof body !== "string" && !(body instanceof Uint8Array)) {
+    throw new Error("UniFi requests only support string or byte request bodies.");
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = httpsRequest(url, {
+      method: init.method,
+      headers: Object.fromEntries(new Headers(init.headers).entries()),
+      agent: insecureUnifiAgent,
+    }, (response) => {
+      const chunks: Uint8Array[] = [];
+      response.on("data", (chunk: Uint8Array) => chunks.push(chunk));
+      response.on("end", () => {
+        resolve(new Response(new Uint8Array(Buffer.concat(chunks)), {
+          status: response.statusCode || 500,
+          headers: response.headers as HeadersInit,
+        }));
+      });
+    });
+    request.on("error", reject);
+    request.end(body || undefined);
+  });
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const { baseUrl, token } = config();
-  const response = await fetch(`${baseUrl}${path}`, {
+  const { baseUrl, token, insecureTls } = config();
+  const response = await unifiFetch(`${baseUrl}${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(init.headers || {}) },
     cache: "no-store",
-  });
+  }, insecureTls);
   const body = await response.json().catch(() => ({})) as ApiResponse<T>;
   if (!response.ok || !["SUCCESS", "OK"].includes(String(body.code || "").toUpperCase())) {
     throw new Error(body.msg || body.message || body.code || `UniFi request failed (${response.status})`);

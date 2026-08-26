@@ -50,6 +50,12 @@ Running the same command again resets Oren's password instead of creating a dupl
 npm run auth:reset-admin-password
 ```
 
+## Managing households
+
+Open **Admin → Households** to create and rename households, add or remove residents, and retire an empty household. Adding a new resident creates a username and one-time temporary password, then shows a message you can copy into your own email. Gatey does not send mail itself.
+
+People belong to one household in this MVP. Removing them preserves their account so the administrator can assign it again later. For safety, Gatey will not delete `oren-home`, a household with residents, or one with Gatey visitor/PIN records.
+
 Start the app:
 
 ```bash

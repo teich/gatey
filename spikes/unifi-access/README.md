@@ -8,7 +8,7 @@ It shares the bridge's runtime configuration names:
 UNIFI_HOST
 UNIFI_ACCESS_API_TOKEN
 UNIFI_ACCESS_PORT=12445
-UNIFI_INSECURE_TLS=true
+UNIFI_INSECURE_TLS=false
 UNIFI_DOOR_NAME=Gate
 ```
 

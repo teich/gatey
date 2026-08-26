@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { mkdir, writeFile } from "node:fs/promises";
+import { Agent, request as httpsRequest } from "node:https";
 import { resolve } from "node:path";
 
 const host = process.env.UNIFI_HOST;
@@ -15,7 +16,7 @@ if (!host || !token) {
   process.exit(1);
 }
 
-if (insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+const insecureUnifiAgent = new Agent({ rejectUnauthorized: false });
 
 const baseUrl = `https://${host}:${port}`;
 const endpoints = [
@@ -45,10 +46,10 @@ async function probe(path) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8_000);
   try {
-    const response = await fetch(`${baseUrl}${path}`, {
+    const response = await unifiFetch(`${baseUrl}${path}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: controller.signal,
-    });
+    }, insecure);
     const contentType = response.headers.get("content-type") || "";
     let body;
     if (contentType.includes("json")) {
@@ -60,6 +61,30 @@ async function probe(path) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function unifiFetch(url, options, allowInsecureTls) {
+  if (!allowInsecureTls) return fetch(url, options);
+
+  return new Promise((resolve, reject) => {
+    const request = httpsRequest(url, {
+      method: options.method,
+      headers: options.headers,
+      agent: insecureUnifiAgent,
+      signal: options.signal,
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => {
+        resolve(new Response(Buffer.concat(chunks), {
+          status: response.statusCode || 500,
+          headers: response.headers,
+        }));
+      });
+    });
+    request.on("error", reject);
+    request.end(options.body);
+  });
 }
 
 const results = await Promise.all(endpoints.map(probe));

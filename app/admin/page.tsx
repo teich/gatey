@@ -40,7 +40,7 @@ export default async function AdminPage() {
   }
 
   if (errorMessage || !visitors || !users || !managedVisitors || !visitorPins || !personPins) {
-    return <main className="admin-shell"><header className="admin-header"><div><p className="eyebrow">Gatey admin</p><h1>Access inventory</h1></div><Link className="admin-home-link" href="/">Resident view</Link></header><section className="admin-empty"><h2>UniFi inventory unavailable</h2><p>{errorMessage ?? "Could not read UniFi Access."}</p></section></main>;
+    return <main className="admin-shell"><header className="admin-header"><div><p className="eyebrow">Gatey admin</p><h1>Access inventory</h1></div><div className="admin-header-links"><Link className="admin-home-link" href="/admin/households">Households</Link><Link className="admin-home-link" href="/">Resident view</Link></div></header><section className="admin-empty"><h2>UniFi inventory unavailable</h2><p>{errorMessage ?? "Could not read UniFi Access."}</p></section></main>;
   }
 
   const currentVisitors = visitors.filter((visitor) => !["CANCELLED", "NO_VISIT", "EXPIRED", "REVOKED"].includes(visitor.status.toUpperCase()));
@@ -50,7 +50,7 @@ export default async function AdminPage() {
     <main className="admin-shell">
       <header className="admin-header">
         <div><p className="eyebrow">Gatey admin</p><h1>Access inventory</h1></div>
-        <Link className="admin-home-link" href="/">Resident view</Link>
+        <div className="admin-header-links"><Link className="admin-home-link" href="/admin/households">Households</Link><Link className="admin-home-link" href="/">Resident view</Link></div>
       </header>
       <section className="admin-intro"><p>People have long-term access. Visitors are time-bound passes. PINs that Gatey creates or replaces are stored here so they stay easy to find.</p><div className="inventory-counts"><span><strong>{users.length}</strong> people in UniFi</span><span><strong>{currentVisitors.length}</strong> current visitors</span><span><strong>{unmanagedVisitors}</strong> visitors not yet managed by Gatey</span></div></section>
 
