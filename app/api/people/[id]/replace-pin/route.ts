@@ -1,9 +1,13 @@
 import { savePersonPin } from "@/lib/db";
 import { replaceUserPin } from "@/lib/unifi-access";
+import { authorizeAdminRequest } from "@/lib/api-authorization";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request, context: RouteContext<"/api/people/[id]/replace-pin">) {
+  const authorization = await authorizeAdminRequest(request, true);
+  if (authorization.response) return authorization.response;
+
   const { id } = await context.params;
   try {
     const body = await request.json() as { label?: unknown; pin?: unknown };
@@ -13,7 +17,7 @@ export async function POST(request: Request, context: RouteContext<"/api/people/
       return Response.json({ error: "Use a 4 to 8 digit PIN." }, { status: 400 });
     }
     const pin = await replaceUserPin(id, requestedPin);
-    savePersonPin({ userId: id, label, pin });
+    savePersonPin({ householdId: authorization.context.household!.id, userId: id, label, pin });
     return Response.json({ pin });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not replace the PIN." }, { status: 502 });

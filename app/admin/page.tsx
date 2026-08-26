@@ -3,6 +3,7 @@ import { ManagePinButton } from "@/app/admin/replace-pin-button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { managedPersonPins, managedVisitorIds, managedVisitorPins } from "@/lib/db";
 import { listUserInventory, listVisitorInventory } from "@/lib/unifi-access";
+import { requirePageAdmin } from "@/lib/authorization";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,6 +18,8 @@ function labelStatus(status: string) {
 }
 
 export default async function AdminPage() {
+  await requirePageAdmin();
+
   let visitors;
   let users;
   let managedVisitors;

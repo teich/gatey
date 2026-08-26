@@ -1,36 +1,66 @@
 # Gatey
 
-A small, resident-first guest code app for Oakview Gate. The product plan lives
-in [`../NEW_APP_PLAN.md`](../NEW_APP_PLAN.md).
+A small, resident-first guest code app for Bennett Valley Gate. Gatey runs on Next.js, stores local state in SQLite, and provisions time-bound access through UniFi Access.
 
-## Current slice
+## Identity and household model
 
-The resident pilot flow is implemented with a fake, device-local backend:
+Gatey uses Better Auth with its Organization, Admin, and Username plugins:
 
-- See active, upcoming, expired, and canceled codes
-- Create a code for today, seven days, or exact dates
-- Copy and share a code
-- Cancel a code with confirmation
-- Keep demo codes across refreshes using browser storage
+- A household is a Better Auth organization.
+- A person is a Better Auth user with an organization membership.
+- A visitor is a time-bound Gatey credential scoped by `household_id`.
+- Every member of a household can list, create, and revoke that household's visitor credentials.
+- The Better Auth `admin` role is app-wide and separate from organization roles such as `owner` and `member`.
 
-The UI says when it is in demo mode. It does not contact UniFi yet and should
-not be mistaken for a real credential issuer.
+Public sign-up is disabled. The initial organization is `oren-home`, preserving the household ID used by the existing pilot data.
 
-## Run locally
+## Requirements
+
+- Node.js 26 or later (Gatey uses the built-in `node:sqlite` module)
+- Access to the UniFi Access controller
+
+## Local setup
+
+Install dependencies and copy the example environment values into `.env`. Set `BETTER_AUTH_SECRET` to at least 32 random characters; one way to create it is:
+
+```bash
+openssl rand -base64 32
+```
+
+Set `BETTER_AUTH_URL` to the browser origin (`http://localhost:3000` locally and the public HTTPS origin in production).
+
+Create the first administrator with Gatey's Better Auth bootstrap helper:
+
+```bash
+npm run auth:create-admin
+```
+
+The command asks for the password twice and creates Oren with:
+
+- email: `oren@teich.net`
+- username: `oren`
+- app role: `admin`
+- `oren-home` organization role: `owner`
+
+The organization membership is added by the auth creation hook. The checked-in migrations are applied automatically when Gatey first opens its database.
+
+Running the same command again resets Oren's password instead of creating a duplicate and revokes existing sessions. The explicit reset alias is equivalent:
+
+```bash
+npm run auth:reset-admin-password
+```
+
+Start the app:
 
 ```bash
 npm run dev -- --hostname 127.0.0.1
 ```
 
-Then open the local URL printed by Next.js. Run `npm run build` for a production
-build.
+Then open the local URL printed by Next.js. Use `npm run build` for a production build.
 
-## Practical MVP posture
+## Deployment notes
 
-This is a convenience system for a residential gate with a nearby unlocked
-pedestrian entrance. The MVP keeps the important boundaries—UniFi calls stay
-server-side, households cannot see each other's codes, and controller-enforced
-expiry is required—without building bank-grade controls around low-impact data.
-
-The next engineering slice is the UniFi capability spike, followed by swapping
-the device-local demo repository for SQLite and adding simple long-lived login.
+- Bind Next.js to `127.0.0.1`; expose only the app through the Cloudflare Tunnel.
+- Keep `BETTER_AUTH_SECRET`, the UniFi token, and the SQLite file outside version control.
+- Set `GATEY_DB_PATH` to an absolute persistent path under systemd.
+- Back up the SQLite database independently of the application.

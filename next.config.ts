@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   // The compiler API performs the same build-time type check without spawning it.
   experimental: {
     useTypeScriptCli: false,
+    // Node 26 currently loses the useful compiler output from Next's build worker.
+    webpackBuildWorker: false,
   },
 };
 

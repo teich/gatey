@@ -1,14 +1,20 @@
 import { insertCredential, listCredentials } from "@/lib/db";
 import { provisionCredential } from "@/lib/unifi-access";
+import { authorizeHouseholdRequest } from "@/lib/api-authorization";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return Response.json({ credentials: listCredentials() });
+export async function GET(request: Request) {
+  const authorization = await authorizeHouseholdRequest(request);
+  if (authorization.response) return authorization.response;
+  return Response.json({ credentials: listCredentials(authorization.context.household.id) });
 }
 
 export async function POST(request: Request) {
+  const authorization = await authorizeHouseholdRequest(request);
+  if (authorization.response) return authorization.response;
+
   try {
     const body = await request.json() as { label?: unknown; startsAt?: unknown; endsAt?: unknown };
     const label = typeof body.label === "string" && body.label.trim() ? body.label.trim() : "Guest";
@@ -18,7 +24,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Choose a valid start and end time." }, { status: 400 });
     }
     const { credential, visitorId } = await provisionCredential({ label, startsAt, endsAt });
-    insertCredential(credential, visitorId);
+    insertCredential(authorization.context.household.id, credential, visitorId);
     return Response.json({ credential }, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not create the guest code." }, { status: 502 });
