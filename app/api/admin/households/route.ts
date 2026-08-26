@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { authorizeAdminRequest } from "@/lib/api-authorization";
-import { getUserByEmail, getUserHousehold, listHouseholds } from "@/lib/households";
+import { getUserByEmail, getUserHousehold, listHouseholds, removeCreatorFromHousehold } from "@/lib/households";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,6 +65,7 @@ export async function POST(request: Request) {
       },
       headers: request.headers,
     });
+    removeCreatorFromHousehold(household.id, authorization.context.session.user.id);
     return Response.json({ household }, { status: 201 });
   } catch (error) {
     return Response.json({ error: errorMessage(error, "Could not create the household.") }, { status: 400 });

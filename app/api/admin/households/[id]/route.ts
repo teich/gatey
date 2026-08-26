@@ -1,6 +1,6 @@
-import { BOOTSTRAP_HOUSEHOLD_ID, auth } from "@/lib/auth";
+import { BOOTSTRAP_HOUSEHOLD_ID } from "@/lib/auth";
 import { authorizeAdminRequest } from "@/lib/api-authorization";
-import { getHousehold, householdHasGateyRecords } from "@/lib/households";
+import { deleteHousehold, getHousehold, householdHasGateyRecords, updateHousehold } from "@/lib/households";
 
 export const runtime = "nodejs";
 
@@ -26,13 +26,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
     const body = await request.json() as { name?: unknown; slug?: unknown };
     const name = cleanText(body.name, "Household name", 80);
     const slug = cleanText(body.slug, "Slug", 64).toLowerCase();
-    const household = await auth.api.updateOrganization({
-      body: {
-        organizationId: id,
-        data: { name, slug },
-      },
-      headers: request.headers,
-    });
+    const household = updateHousehold(id, { name, slug });
     return Response.json({ household });
   } catch (error) {
     return Response.json({ error: errorMessage(error, "Could not update the household.") }, { status: 400 });
@@ -50,8 +44,7 @@ export async function DELETE(request: Request, context: RouteContext<"/api/admin
 
   const household = getHousehold(id);
   if (!household) return Response.json({ error: "Household not found." }, { status: 404 });
-  const otherMembers = household.members.filter((member) => member.userId !== authorization.context.session.user.id);
-  if (otherMembers.length > 0) {
+  if (household.members.length > 0) {
     return Response.json({ error: "Remove the household's residents before deleting it." }, { status: 400 });
   }
   if (householdHasGateyRecords(id)) {
@@ -59,10 +52,7 @@ export async function DELETE(request: Request, context: RouteContext<"/api/admin
   }
 
   try {
-    await auth.api.deleteOrganization({
-      body: { organizationId: id },
-      headers: request.headers,
-    });
+    deleteHousehold(id);
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json({ error: errorMessage(error, "Could not delete the household.") }, { status: 400 });

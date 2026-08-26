@@ -72,6 +72,26 @@ export function getHousehold(id: string): HouseholdAdminRecord | null {
   return listHouseholds().find((household) => household.id === id) ?? null;
 }
 
+export function updateHousehold(id: string, input: { name: string; slug: string }): HouseholdAdminRecord | null {
+  database.prepare(`
+    UPDATE organization
+    SET name = ?, slug = ?
+    WHERE id = ?
+  `).run(input.name, input.slug, id);
+  return getHousehold(id);
+}
+
+export function deleteHousehold(id: string) {
+  database.prepare("DELETE FROM organization WHERE id = ?").run(id);
+}
+
+// Better Auth creates an organization with the caller as a member. Gatey
+// households are administered separately, so a newly-created household is
+// intentionally left empty until a resident is added.
+export function removeCreatorFromHousehold(householdId: string, userId: string) {
+  database.prepare("DELETE FROM member WHERE organizationId = ? AND userId = ?").run(householdId, userId);
+}
+
 export function getHouseholdMember(householdId: string, memberId: string): HouseholdMember | null {
   const member = database.prepare(`
     SELECT

@@ -145,7 +145,7 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
         <div className="household-people">
           <div><p className="eyebrow">Residents</p><h2>{household.members.length} {household.members.length === 1 ? "person" : "people"}</h2></div>
           <ul className="household-member-list">
-            {household.members.map((member) => <li key={member.id}><div><strong>{member.name}</strong><span>{member.username ? `${member.username} · ` : ""}{member.email}</span></div><div className="household-member-actions"><span className="member-role">{member.role}</span>{member.role.split(",").includes("owner") ? null : <button className="text-button danger" type="button" disabled={working === `remove-${member.id}`} onClick={() => void removeMember(household.id, member.id, member.name)}>Remove</button>}</div></li>)}
+            {household.members.map((member) => <li key={member.id}><div><strong>{member.name}</strong><span>{member.username ? `${member.username} · ` : ""}{member.email}</span></div><div className="household-member-actions">{member.role.split(",").includes("owner") ? null : <button className="text-button danger" type="button" disabled={working === `remove-${member.id}`} onClick={() => void removeMember(household.id, member.id, member.name)}>Remove</button>}</div></li>)}
           </ul>
           <form className="household-form person-form" onSubmit={(event) => void addPerson(event, household)}>
             <p>Add a person</p>
