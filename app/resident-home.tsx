@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
@@ -275,7 +276,7 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
 
   return (
     <main className="app-shell">
-      <header className="topbar"><div><p className="eyebrow">Home</p><h1>{householdName}</h1></div><div className="account-actions">{isSystemAdmin && <a className="admin-link" href="/admin">Admin</a>}<button className="sign-out-link" type="button" onClick={signOut}>Sign out</button></div></header>
+      <header className="topbar"><div className="home-brand"><Image className="home-logo" src="/gatey-logo.png" alt="Gatey" width={1536} height={1024} priority /><div><p className="eyebrow">Home</p><h1>{householdName}</h1></div></div><div className="account-actions">{isSystemAdmin && <a className="admin-link" href="/admin">Admin</a>}<button className="sign-out-link" type="button" onClick={signOut}>Sign out</button></div></header>
       <section className="welcome" aria-labelledby="welcome-title"><p className="eyebrow">{today}</p><h2 id="welcome-title">{greeting}, {firstName}.</h2><p>Who are we welcoming today?</p><button className="primary-action" type="button" onClick={openCreate}><span aria-hidden="true">＋</span>Create guest code</button></section>
 
       {!ready ? <p className="loading">Finding your codes…</p> : (

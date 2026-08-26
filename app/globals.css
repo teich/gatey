@@ -58,6 +58,8 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .app-shell { width: min(100%, 560px); min-height: 100vh; margin: 0 auto; padding: 28px 20px 48px; }
 .topbar, .code-card-top, .section-heading, .past-codes, .flow-header { display: flex; align-items: center; justify-content: space-between; }
+.home-brand { display: flex; min-width: 0; align-items: center; gap: 11px; }
+.home-logo { display: block; width: 68px; height: auto; flex: none; }
 .topbar h1 { margin: 3px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 25px; font-weight: 600; letter-spacing: -.02em; }
 .eyebrow { margin: 0; color: var(--gatey-muted); font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .account-actions { display: flex; align-items: center; gap: 8px; }
@@ -243,6 +245,7 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .auth-shell { display: grid; min-height: 100vh; padding: 24px; place-items: center; }
 .auth-card { width: min(100%, 430px); padding: clamp(28px, 7vw, 44px); border: 1px solid var(--line); border-radius: 24px; background: rgba(255, 253, 248, .94); box-shadow: 0 18px 55px rgba(30, 43, 35, .1); }
+.auth-logo { display: block; width: min(100%, 220px); height: auto; margin: 0 auto 20px; }
 .auth-card h1 { margin: 10px 0 12px; font-family: Georgia, "Times New Roman", serif; font-size: clamp(38px, 9vw, 50px); font-weight: 500; letter-spacing: -.045em; line-height: 1; }
 .auth-card > p:not(.eyebrow, .form-error) { margin: 0; color: var(--gatey-muted); font-size: 17px; line-height: 1.5; }
 .auth-card > .secondary-action { margin-top: 26px; }
