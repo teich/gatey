@@ -6,6 +6,29 @@ import type { Credential } from "@/lib/credentials";
 type ApiResponse<T> = { code?: string; data?: T; msg?: string; message?: string };
 type Door = { id: string; name: string; type: string };
 
+type UnifiVisitor = {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  status?: string;
+  start_time?: number;
+  end_time?: number;
+  pin_code?: string | null;
+  schedule?: unknown;
+  resources?: Array<{ name?: string; type?: string }>;
+};
+
+export type VisitorInventoryItem = {
+  id: string;
+  name: string;
+  status: string;
+  startsAt?: string;
+  endsAt?: string;
+  hasPin: boolean;
+  recurring: boolean;
+  resources: string[];
+};
+
 function config() {
   const host = process.env.UNIFI_HOST;
   const token = process.env.UNIFI_ACCESS_API_TOKEN;
@@ -90,4 +113,18 @@ export async function provisionCredential(input: { label: string; startsAt: Date
 
 export async function revokeCredential(visitorId: string) {
   await request<null>(`/visitors/${encodeURIComponent(visitorId)}`, { method: "DELETE" });
+}
+
+export async function listVisitorInventory(): Promise<VisitorInventoryItem[]> {
+  const visitors = await request<UnifiVisitor[]>("/visitors");
+  return visitors.map((visitor) => ({
+    id: visitor.id,
+    name: [visitor.first_name, visitor.last_name].filter(Boolean).join(" ") || "Unnamed visitor",
+    status: visitor.status || "UNKNOWN",
+    ...(typeof visitor.start_time === "number" ? { startsAt: new Date(visitor.start_time * 1_000).toISOString() } : {}),
+    ...(typeof visitor.end_time === "number" ? { endsAt: new Date(visitor.end_time * 1_000).toISOString() } : {}),
+    hasPin: Boolean(visitor.pin_code),
+    recurring: Boolean(visitor.schedule),
+    resources: (visitor.resources || []).map((resource) => resource.name || resource.type || "Unnamed location"),
+  })).sort((left, right) => (right.endsAt || "").localeCompare(left.endsAt || ""));
 }

@@ -265,7 +265,7 @@ export default function Home() {
 
   return (
     <main className="app-shell">
-      <header className="topbar"><div><p className="eyebrow">Home</p><h1>Oakview Gate</h1></div><button className="avatar" type="button" aria-label="Account for Oren">OS</button></header>
+      <header className="topbar"><div><p className="eyebrow">Home</p><h1>Oakview Gate</h1></div><a className="avatar" href="/admin" aria-label="Open admin view">OS</a></header>
       <section className="welcome" aria-labelledby="welcome-title"><p className="eyebrow">{today}</p><h2 id="welcome-title">{greeting}, Oren.</h2><p>Who are we welcoming today?</p><button className="primary-action" type="button" onClick={openCreate}><span aria-hidden="true">＋</span>Create guest code</button></section>
 
       {!ready ? <p className="loading">Finding your codes…</p> : (

@@ -78,6 +78,11 @@ export function getControllerVisitorId(id: string): string | undefined {
   return row?.controller_visitor_id;
 }
 
+export function managedVisitorIds(): Set<string> {
+  const rows = db.prepare("SELECT controller_visitor_id FROM credentials WHERE household_id = 'oren-home'").all() as Array<{ controller_visitor_id: string }>;
+  return new Set(rows.map((row) => row.controller_visitor_id));
+}
+
 export function markRevoked(id: string) {
   db.prepare("UPDATE credentials SET state = 'revoked', revoked_at = ? WHERE id = ? AND household_id = 'oren-home'").run(new Date().toISOString(), id);
 }
