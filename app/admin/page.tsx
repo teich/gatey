@@ -38,7 +38,8 @@ export default async function AdminPage() {
     return <main className="admin-shell"><header className="admin-header"><div><p className="eyebrow">Gatey admin</p><h1>Access inventory</h1></div><Link className="admin-home-link" href="/">Resident view</Link></header><section className="admin-empty"><h2>UniFi inventory unavailable</h2><p>{errorMessage ?? "Could not read UniFi Access."}</p></section></main>;
   }
 
-  const unmanagedVisitors = visitors.filter((visitor) => !managedVisitors.has(visitor.id)).length;
+  const currentVisitors = visitors.filter((visitor) => !["CANCELLED", "NO_VISIT", "EXPIRED", "REVOKED"].includes(visitor.status.toUpperCase()));
+  const unmanagedVisitors = currentVisitors.filter((visitor) => !managedVisitors.has(visitor.id)).length;
 
   return (
     <main className="admin-shell">
@@ -46,7 +47,7 @@ export default async function AdminPage() {
         <div><p className="eyebrow">Gatey admin</p><h1>Access inventory</h1></div>
         <Link className="admin-home-link" href="/">Resident view</Link>
       </header>
-      <section className="admin-intro"><p>People have long-term access. Visitors are time-bound passes. PINs that Gatey creates or replaces are stored here so they stay easy to find.</p><div className="inventory-counts"><span><strong>{users.length}</strong> people in UniFi</span><span><strong>{visitors.length}</strong> visitors in UniFi</span><span><strong>{unmanagedVisitors}</strong> visitors not yet managed by Gatey</span></div></section>
+      <section className="admin-intro"><p>People have long-term access. Visitors are time-bound passes. PINs that Gatey creates or replaces are stored here so they stay easy to find.</p><div className="inventory-counts"><span><strong>{users.length}</strong> people in UniFi</span><span><strong>{currentVisitors.length}</strong> current visitors</span><span><strong>{unmanagedVisitors}</strong> visitors not yet managed by Gatey</span></div></section>
 
       <section className="inventory-section" aria-labelledby="people-heading">
         <div className="inventory-section-heading"><p className="eyebrow">Long-term access</p><h2 id="people-heading">People</h2></div>
@@ -58,7 +59,7 @@ export default async function AdminPage() {
 
       <section className="inventory-section" aria-labelledby="visitors-heading">
         <div className="inventory-section-heading"><p className="eyebrow">Time-bound access</p><h2 id="visitors-heading">Visitors</h2></div>
-        {visitors.length === 0 ? <section className="admin-empty"><p>UniFi returned an empty visitor list.</p></section> : <div className="admin-table-shell"><Table><TableHeader><TableRow><TableHead>Visitor</TableHead><TableHead>PIN</TableHead><TableHead>Visit type</TableHead><TableHead>Starts</TableHead><TableHead>Ends</TableHead><TableHead>Location</TableHead><TableHead>Source</TableHead></TableRow></TableHeader><TableBody>{visitors.map((visitor) => {
+        {currentVisitors.length === 0 ? <section className="admin-empty"><p>No current visitors.</p></section> : <div className="admin-table-shell"><Table><TableHeader><TableRow><TableHead>Visitor</TableHead><TableHead>PIN</TableHead><TableHead>Visit type</TableHead><TableHead>Starts</TableHead><TableHead>Ends</TableHead><TableHead>Location</TableHead><TableHead>Source</TableHead></TableRow></TableHeader><TableBody>{currentVisitors.map((visitor) => {
           const isManaged = managedVisitors.has(visitor.id);
           return <TableRow key={visitor.id}><TableCell><strong>{visitor.name}</strong><span className={`inventory-status ${visitor.status.toLowerCase()}`}>{labelStatus(visitor.status)}</span></TableCell><TableCell>{visitor.hasPin ? "Assigned" : "No PIN"}</TableCell><TableCell>{visitor.recurring ? "Recurring" : "One time"}</TableCell><TableCell>{formatDate(visitor.startsAt)}</TableCell><TableCell>{formatDate(visitor.endsAt)}</TableCell><TableCell className="policy-cell">{visitor.resources.length ? visitor.resources.join(", ") : "None assigned"}</TableCell><TableCell><span className={isManaged ? "managed-badge" : "existing-badge"}>{isManaged ? "Gatey" : "UniFi"}</span></TableCell></TableRow>;
         })}</TableBody></Table></div>}

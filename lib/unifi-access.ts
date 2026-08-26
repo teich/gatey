@@ -50,6 +50,12 @@ export type UserInventoryItem = {
   hasNfcCard: boolean;
 };
 
+function timestampToIso(timestamp?: number): string | undefined {
+  if (typeof timestamp !== "number") return undefined;
+  const milliseconds = timestamp > 100_000_000_000 ? timestamp : timestamp * 1_000;
+  return new Date(milliseconds).toISOString();
+}
+
 function config() {
   const host = process.env.UNIFI_HOST;
   const token = process.env.UNIFI_ACCESS_API_TOKEN;
@@ -138,16 +144,20 @@ export async function revokeCredential(visitorId: string) {
 
 export async function listVisitorInventory(): Promise<VisitorInventoryItem[]> {
   const visitors = await request<UnifiVisitor[]>("/visitors");
-  return visitors.map((visitor) => ({
-    id: visitor.id,
-    name: [visitor.first_name, visitor.last_name].filter(Boolean).join(" ") || "Unnamed visitor",
-    status: visitor.status || "UNKNOWN",
-    ...(typeof visitor.start_time === "number" ? { startsAt: new Date(visitor.start_time * 1_000).toISOString() } : {}),
-    ...(typeof visitor.end_time === "number" ? { endsAt: new Date(visitor.end_time * 1_000).toISOString() } : {}),
-    hasPin: Boolean(visitor.pin_code),
-    recurring: Boolean(visitor.schedule),
-    resources: (visitor.resources || []).map((resource) => resource.name || resource.type || "Unnamed location"),
-  })).sort((left, right) => (right.endsAt || "").localeCompare(left.endsAt || ""));
+  return visitors.map((visitor) => {
+    const startsAt = timestampToIso(visitor.start_time);
+    const endsAt = timestampToIso(visitor.end_time);
+    return {
+      id: visitor.id,
+      name: [visitor.first_name, visitor.last_name].filter(Boolean).join(" ") || "Unnamed visitor",
+      status: visitor.status || "UNKNOWN",
+      ...(startsAt ? { startsAt } : {}),
+      ...(endsAt ? { endsAt } : {}),
+      hasPin: Boolean(visitor.pin_code),
+      recurring: Boolean(visitor.schedule),
+      resources: (visitor.resources || []).map((resource) => resource.name || resource.type || "Unnamed location"),
+    };
+  }).sort((left, right) => (right.endsAt || "").localeCompare(left.endsAt || ""));
 }
 
 export async function listUserInventory(): Promise<UserInventoryItem[]> {
