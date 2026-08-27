@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "HOSTNAME=127.0.0.1 node .next/standalone/server.js",
     "lint": "eslint",
     "auth:create-admin": "node --env-file-if-exists=.env scripts/bootstrap-admin.mjs",
     "auth:reset-admin-password": "node --env-file-if-exists=.env scripts/bootstrap-admin.mjs",

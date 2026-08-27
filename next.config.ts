@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Copy only traced runtime dependencies into .next/standalone for deployments.
+  output: "standalone",
   // The CLI checker has a Node 26 process-output issue in the local dev host.
   // The compiler API performs the same build-time type check without spawning it.
   experimental: {

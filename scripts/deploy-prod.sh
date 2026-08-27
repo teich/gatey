@@ -36,8 +36,20 @@ npm --prefix "$build_root" ci --no-audit --no-fund
 GATEY_DB_PATH="$deploy_temp/build.sqlite" NODE_ENV=production \
   npm --prefix "$build_root" run build
 
+# Standalone output deliberately omits static and public assets; put them beside
+# its minimal server so it can serve them without the full node_modules tree.
+if [[ ! -f "$build_root/.next/standalone/server.js" ]]; then
+  echo "The commit being deployed does not enable Next standalone output. Commit and push the standalone deployment changes before deploying." >&2
+  exit 1
+fi
+mkdir -p "$build_root/.next/standalone/.next"
+cp -R "$build_root/.next/static" "$build_root/.next/standalone/.next/"
+if [[ -d "$build_root/public" ]]; then
+  cp -R "$build_root/public" "$build_root/.next/standalone/"
+fi
+
 artifact="$deploy_temp/gatey-$short_commit.tar.gz"
-tar -C "$build_root" -czf "$artifact" .next node_modules
+tar -C "$build_root" -czf "$artifact" .next/standalone
 remote_artifact="/tmp/gatey-$short_commit.tar.gz"
 
 echo "Uploading the build to $prod_host…"
@@ -86,7 +98,7 @@ fi
 
 install -d -o "$app_user" -g "$app_user" -m 755 "$stage"
 runuser -u "$app_user" -- tar -xzf "$remote_artifact" -C "$stage"
-if [[ ! -f "$stage/.next/BUILD_ID" || ! -x "$stage/node_modules/.bin/next" ]]; then
+if [[ ! -f "$stage/.next/standalone/server.js" || ! -d "$stage/.next/standalone/.next/static" ]]; then
   echo "The uploaded build artifact is incomplete." >&2
   exit 1
 fi
@@ -123,8 +135,7 @@ install -m 644 "$repo/systemd/$party_timer" "/etc/systemd/system/$party_timer"
 systemctl daemon-reload
 
 next_backup="$repo/.next.before-$previous_commit"
-modules_backup="$repo/node_modules.before-$previous_commit"
-if [[ -e "$next_backup" || -e "$modules_backup" ]]; then
+if [[ -e "$next_backup" ]]; then
   echo "A previous deployment backup is still present; refusing to overwrite it." >&2
   exit 1
 fi
@@ -133,19 +144,15 @@ rollback() {
   echo "The new release failed its health check; restoring $previous_commit…" >&2
   systemctl stop "$service" || true
   if [[ -d "$repo/.next" ]]; then mv "$repo/.next" "$stage/.next.failed"; fi
-  if [[ -d "$repo/node_modules" ]]; then mv "$repo/node_modules" "$stage/node_modules.failed"; fi
   if [[ -d "$next_backup" ]]; then mv "$next_backup" "$repo/.next"; fi
-  if [[ -d "$modules_backup" ]]; then mv "$modules_backup" "$repo/node_modules"; fi
   runuser -u "$app_user" -- git -C "$repo" reset --hard "$previous_commit"
   systemctl start "$service"
 }
 
 systemctl stop "$service"
 if [[ -d "$repo/.next" ]]; then mv "$repo/.next" "$next_backup"; fi
-if [[ -d "$repo/node_modules" ]]; then mv "$repo/node_modules" "$modules_backup"; fi
 mv "$stage/.next" "$repo/.next"
-mv "$stage/node_modules" "$repo/node_modules"
-chown -R "$app_user:$app_user" "$repo/.next" "$repo/node_modules"
+chown -R "$app_user:$app_user" "$repo/.next"
 systemctl start "$service"
 
 healthy=0
@@ -171,7 +178,7 @@ if ! systemctl is-active --quiet "$party_timer"; then
   exit 1
 fi
 
-rm -rf "$next_backup" "$modules_backup" "$stage"
+rm -rf "$next_backup" "$repo/node_modules" "$stage"
 rm -f "$remote_artifact"
 echo "Gatey $(runuser -u "$app_user" -- git -C "$repo" rev-parse --short HEAD) is active on $(node --version)."
 REMOTE
