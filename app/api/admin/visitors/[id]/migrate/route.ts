@@ -34,7 +34,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/v
     await revokeCredential(oldVisitorId);
     const startsAt = new Date();
     const endsAt = new Date(ONGOING_CONTROLLER_END);
-    const { visitorId } = await provisionGateCode({ label, pin, startsAt, endsAt });
+    const { visitorId } = await provisionGateCode({ householdName: household.name, label, pin, startsAt, endsAt });
     const codeId = saveGateCode({ householdId, label, pin, kind, startsAt: startsAt.toISOString(), controllerEndsAt: endsAt.toISOString(), controllerVisitorId: visitorId });
     try {
       const { user } = authorization.context.session;

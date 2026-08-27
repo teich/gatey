@@ -282,16 +282,16 @@ export async function generateGateCodePin(): Promise<string> {
   return request<string>("/credentials/pin_codes", { method: "POST" });
 }
 
-export async function provisionGateCode(input: { label: string; pin: string; startsAt: Date; endsAt: Date }): Promise<{ visitorId: string }> {
+export async function provisionGateCode(input: { householdName: string; label: string; pin: string; startsAt: Date; endsAt: Date }): Promise<{ visitorId: string }> {
   assertControllerChangesAllowed();
   const door = await gateDoor();
   const visitor = await request<{ id: string }>("/visitors", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      first_name: input.label.slice(0, 80),
-      last_name: "Gatey",
-      remarks: "Managed by Gatey. Change this code in Gatey.",
+      first_name: "Gatey",
+      last_name: `${input.householdName} — ${input.label}`.slice(0, 80),
+      remarks: `Managed by Gatey for ${input.householdName}. Change this code in Gatey.`.slice(0, 255),
       start_time: Math.floor(input.startsAt.getTime() / 1_000),
       end_time: Math.floor(input.endsAt.getTime() / 1_000),
       visit_reason: "Others",

@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     if (kind === "home" && hasHomeCode(householdId)) return Response.json({ error: "Your household already has a home code." }, { status: 409 });
     if (Number.isNaN(startsAt.valueOf()) || Number.isNaN(endsAt.valueOf()) || endsAt <= startsAt) return Response.json({ error: "Choose a valid time for this code." }, { status: 400 });
 
-    const { visitorId } = await provisionGateCode({ label, pin, startsAt, endsAt });
+    const { visitorId } = await provisionGateCode({ householdName: authorization.context.household.name, label, pin, startsAt, endsAt });
     const id = saveGateCode({ householdId, label, pin, kind, startsAt: startsAt.toISOString(), ...(kind === "temporary" ? { endsAt: endsAt.toISOString() } : {}), controllerEndsAt: endsAt.toISOString(), controllerVisitorId: visitorId });
     const code = listGateCodes(householdId).find((item) => item.id === id)!;
     try {
