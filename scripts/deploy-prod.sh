@@ -97,6 +97,11 @@ if ! grep -q '^GATEY_SCHEDULER_SECRET=' "$environment_file"; then
   chmod 600 "$environment_file"
 fi
 
+if ! grep -q '^GATEY_UNIFI_WRITES=' "$environment_file"; then
+  printf '\nGATEY_UNIFI_WRITES=true\n' >> "$environment_file"
+  chmod 600 "$environment_file"
+fi
+
 install -d -o "$app_user" -g "$app_user" -m 700 "$backup_dir"
 backup="$backup_dir/gatey-$(date -u +%Y%m%dT%H%M%SZ).sqlite"
 runuser -u "$app_user" -- sqlite3 "$database" ".backup '$backup'"

@@ -1103,6 +1103,80 @@ button { -webkit-tap-highlight-color: transparent; }
   font-size: 13px;
 }
 
+.resident-code-last-used {
+  margin: 5px 0 0;
+  color: var(--gatey-muted);
+  font-size: 12px;
+}
+
+.resident-gate-guest-section {
+  margin-top: 28px;
+}
+
+.resident-guest-summary-list {
+  display: grid;
+  gap: 9px;
+}
+
+.resident-guest-summary-card {
+  display: grid;
+  width: 100%;
+  min-height: 72px;
+  padding: 13px 15px;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 253, 248, .92);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.resident-guest-summary-card span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.resident-guest-summary-card strong {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resident-guest-summary-card small {
+  color: var(--gatey-muted);
+  font-size: 12px;
+}
+
+.resident-guest-summary-card b {
+  color: var(--forest-dark);
+  font-family: ui-monospace, monospace;
+  font-size: 17px;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+
+.resident-guest-summary-card svg {
+  width: 18px;
+  color: var(--gatey-muted);
+}
+
+.resident-view-all-codes {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--forest);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .resident-card-actions {
   display: flex;
   margin-top: 15px;

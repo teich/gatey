@@ -26,6 +26,10 @@ type UnifiVisitor = {
   resources?: Array<{ name?: string; type?: string }>;
 };
 
+type UnifiSystemLog = {
+  _source?: { event?: { published?: number; result?: string } };
+};
+
 type UnifiUser = {
   id: string;
   first_name?: string;
@@ -49,7 +53,15 @@ type CachedGateStatus = {
 const globalForGateStatus = globalThis as unknown as {
   gateyGateStatus?: CachedGateStatus;
   gateyGateStatusPromise?: Promise<GateStatus>;
+  gateyCredentialLastUses?: Map<string, { value: string | undefined; expiresAt: number }>;
 };
+
+const CREDENTIAL_LAST_USE_TTL_MS = 60_000;
+
+function assertControllerChangesAllowed() {
+  if (["1", "true", "yes"].includes((process.env.GATEY_UNIFI_WRITES || "").toLowerCase())) return;
+  throw new Error("Gate code and party-mode changes are enabled only on Gatey's production server.");
+}
 
 export type VisitorInventoryItem = {
   id: string;
@@ -195,6 +207,7 @@ export async function unlockGate(actor: { id: string; name: string }): Promise<G
 }
 
 export async function holdGateOpenUntil(endsAt: Date) {
+  assertControllerChangesAllowed();
   const minutes = Math.ceil((endsAt.getTime() - Date.now()) / 60_000);
   if (minutes < 1) throw new Error("Choose a party end time at least one minute from now.");
 
@@ -208,6 +221,7 @@ export async function holdGateOpenUntil(endsAt: Date) {
 }
 
 export async function endGateHoldOpen() {
+  assertControllerChangesAllowed();
   const door = await gateDoor();
   await request<"success">(`/doors/${encodeURIComponent(door.id)}/lock_rule`, {
     method: "PUT",
@@ -222,6 +236,7 @@ function allDaySchedule() {
 }
 
 export async function provisionCredential(input: { label: string; startsAt: Date; endsAt: Date }): Promise<{ credential: Credential; visitorId: string }> {
+  assertControllerChangesAllowed();
   const door = await gateDoor();
   const visitor = await request<{ id: string }>("/visitors", {
     method: "POST",
@@ -262,8 +277,73 @@ export async function provisionCredential(input: { label: string; startsAt: Date
   }
 }
 
+export async function generateGateCodePin(): Promise<string> {
+  assertControllerChangesAllowed();
+  return request<string>("/credentials/pin_codes", { method: "POST" });
+}
+
+export async function provisionGateCode(input: { label: string; pin: string; startsAt: Date; endsAt: Date }): Promise<{ visitorId: string }> {
+  assertControllerChangesAllowed();
+  const door = await gateDoor();
+  const visitor = await request<{ id: string }>("/visitors", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      first_name: input.label.slice(0, 80),
+      last_name: "Gatey",
+      remarks: "Managed by Gatey. Change this code in Gatey.",
+      start_time: Math.floor(input.startsAt.getTime() / 1_000),
+      end_time: Math.floor(input.endsAt.getTime() / 1_000),
+      visit_reason: "Others",
+      week_schedule: allDaySchedule(),
+      resources: [{ id: door.id, type: "door" }],
+    }),
+  });
+
+  try {
+    await request<null>(`/visitors/${encodeURIComponent(visitor.id)}/pin_codes`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin_code: input.pin }),
+    });
+    return { visitorId: visitor.id };
+  } catch (error) {
+    await request<null>(`/visitors/${encodeURIComponent(visitor.id)}`, { method: "DELETE" }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function revokeCredential(visitorId: string) {
+  assertControllerChangesAllowed();
   await request<null>(`/visitors/${encodeURIComponent(visitorId)}`, { method: "DELETE" });
+}
+
+export async function getCredentialLastUse(visitorId: string, startsAt: string, endsAt: string): Promise<string | undefined> {
+  const cached = globalForGateStatus.gateyCredentialLastUses?.get(visitorId);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  if (Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf())) return undefined;
+
+  const logs = await request<{ hits?: UnifiSystemLog[] }>("/system/logs?page_num=1&page_size=100", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      topic: "door_openings",
+      since: Math.floor(start.getTime() / 1_000),
+      until: Math.floor(Math.min(end.getTime(), Date.now()) / 1_000),
+      actor_id: visitorId,
+    }),
+  });
+
+  // Denied attempts are intentionally not presented as a use of the code.
+  const hit = logs.hits?.find((item) => !["BLOCKED", "DENIED", "FAILED"].includes(String(item._source?.event?.result || "").toUpperCase()));
+  const value = timestampToIso(hit?._source?.event?.published);
+  const cache = globalForGateStatus.gateyCredentialLastUses ?? new Map<string, { value: string | undefined; expiresAt: number }>();
+  cache.set(visitorId, { value, expiresAt: Date.now() + CREDENTIAL_LAST_USE_TTL_MS });
+  globalForGateStatus.gateyCredentialLastUses = cache;
+  return value;
 }
 
 export async function listVisitorInventory(): Promise<VisitorInventoryItem[]> {
@@ -297,6 +377,7 @@ export async function listUserInventory(): Promise<UserInventoryItem[]> {
 }
 
 export async function replaceUserPin(userId: string, requestedPin?: string): Promise<string> {
+  assertControllerChangesAllowed();
   if (requestedPin) {
     await request<null>(`/users/${encodeURIComponent(userId)}/pin_codes`, {
       method: "PUT",
@@ -321,6 +402,7 @@ export async function replaceUserPin(userId: string, requestedPin?: string): Pro
 }
 
 export async function replaceVisitorPin(visitorId: string, requestedPin?: string): Promise<string> {
+  assertControllerChangesAllowed();
   if (requestedPin) {
     await request<null>(`/visitors/${encodeURIComponent(visitorId)}/pin_codes`, {
       method: "PUT",

@@ -19,6 +19,13 @@ export type HouseholdPermanentCode = {
   pin: string;
 };
 
+export type CredentialUsageLookup = {
+  id: string;
+  controllerVisitorId: string;
+  startsAt: string;
+  endsAt: string;
+};
+
 function mapCredential(row: CredentialRow): Credential {
   const now = Date.now();
   const computedState: CredentialState = row.revoked_at
@@ -47,6 +54,14 @@ export function listCredentials(householdId: string): Credential[] {
     ORDER BY starts_at DESC, created_at DESC
   `).all(householdId) as CredentialRow[];
   return rows.map(mapCredential);
+}
+
+export function listCredentialUsageLookups(householdId: string): CredentialUsageLookup[] {
+  return database.prepare(`
+    SELECT id, controller_visitor_id AS controllerVisitorId, starts_at AS startsAt, ends_at AS endsAt
+    FROM credentials
+    WHERE household_id = ?
+  `).all(householdId) as CredentialUsageLookup[];
 }
 
 export function listHouseholdPermanentCodes(householdId: string): HouseholdPermanentCode[] {

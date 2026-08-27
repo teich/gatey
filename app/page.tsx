@@ -1,7 +1,6 @@
 import { ResidentHome } from "@/app/resident-home";
 import { requirePageHousehold } from "@/lib/authorization";
 import { camerasConfigured } from "@/lib/camera-snapshots";
-import { listHouseholdPermanentCodes } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,7 +13,6 @@ export default async function HomePage() {
       householdName={household.name}
       userName={session.user.name}
       isSystemAdmin={isSystemAdmin}
-      permanentCodes={listHouseholdPermanentCodes(household.id)}
       camerasConfigured={camerasConfigured()}
     />
   );

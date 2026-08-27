@@ -40,6 +40,8 @@ type GuestCode = {
   startsAt: string;
   endsAt: string;
   revokedAt?: string;
+  lastUsedAt?: string;
+  lastUseKnown?: boolean;
 };
 
 type PermanentCode = {
@@ -47,6 +49,14 @@ type PermanentCode = {
   label: string;
   pin: string;
   kind: "household" | "person";
+  lastUsedAt?: string;
+  lastUseKnown?: boolean;
+};
+
+type GateCodeResponse = GuestCode & {
+  kind: "home" | "ongoing" | "temporary";
+  state: "active" | "disabled";
+  controllerEndsAt: string;
 };
 
 type PartyMode = {
@@ -99,6 +109,18 @@ function codeTiming(code: GuestCode, state: CodeState) {
   return end.toDateString() === today.toDateString()
     ? `Works until ${formatTime(end)} today`
     : `Works until ${formatDateTime(code.endsAt, end.getFullYear() !== today.getFullYear())}`;
+}
+
+function codeLastUsed(code: Pick<GuestCode, "lastUsedAt" | "lastUseKnown">) {
+  if (code.lastUseKnown === false) return "Last use unavailable";
+  if (!code.lastUsedAt) return "Not used yet";
+  const used = new Date(code.lastUsedAt);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (used.toDateString() === today.toDateString()) return `Used today at ${formatTime(used)}`;
+  if (used.toDateString() === yesterday.toDateString()) return `Used yesterday at ${formatTime(used)}`;
+  return `Used ${formatDateTime(code.lastUsedAt, used.getFullYear() !== today.getFullYear())}`;
 }
 
 function toLocalInputValue(date: Date) {
@@ -163,6 +185,7 @@ function GuestCodeCard({
         <p className="resident-small-pin" aria-label={`Gate code ${code.pin.split("").join(" ")}`}>{spacedPin(code.pin)}</p>
       </div>
       <p className="resident-code-timing">{codeTiming(code, state)}</p>
+      <p className="resident-code-last-used">{codeLastUsed(code)}</p>
       <div className="resident-card-actions">
         <button type="button" onClick={() => onCopy(code)}><Copy aria-hidden="true" />{copied ? "Copied" : "Copy"}</button>
         <button type="button" onClick={() => onShare(code)}><Share2 aria-hidden="true" />Share</button>
@@ -170,6 +193,14 @@ function GuestCodeCard({
       </div>
     </article>
   );
+}
+
+function GuestCodeSummaryCard({ code, onOpen }: { code: GuestCode; onOpen: () => void }) {
+  return <button className="resident-guest-summary-card" type="button" onClick={onOpen}>
+    <span><strong>{code.label || "Guest"}</strong><small>{codeLastUsed(code)}</small></span>
+    <b aria-label={`Gate code ${code.pin.split("").join(" ")}`}>{spacedPin(code.pin)}</b>
+    <ChevronRight aria-hidden="true" />
+  </button>;
 }
 
 function CameraSnapshot({
@@ -202,27 +233,17 @@ export function ResidentHome({
   householdName,
   userName,
   isSystemAdmin,
-  permanentCodes: storedPermanentCodes,
   camerasConfigured,
 }: {
   householdName: string;
   userName: string;
   isSystemAdmin: boolean;
-  permanentCodes: Array<{ id: string; label: string; pin: string }>;
   camerasConfigured: boolean;
 }) {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>("gate");
   const [guestCodes, setGuestCodes] = useState<GuestCode[]>([]);
-  const [permanentCodes, setPermanentCodes] = useState<PermanentCode[]>(() => {
-    if (storedPermanentCodes.length) {
-      return storedPermanentCodes.map((code, index) => ({ ...code, kind: index === 0 ? "household" : "person" }));
-    }
-    return [
-      { id: "preview-house", label: `${householdName} gate code`, pin: "4826", kind: "household" },
-      { id: "preview-sarah", label: "Sarah", pin: "1937", kind: "person" },
-    ];
-  });
+  const [permanentCodes, setPermanentCodes] = useState<PermanentCode[]>([]);
   const [ready, setReady] = useState(false);
   const [gateState, setGateState] = useState<GateState>("unknown");
   const [gateOpening, setGateOpening] = useState(false);
@@ -268,13 +289,16 @@ export function ResidentHome({
   const [passwordPending, setPasswordPending] = useState(false);
 
   useEffect(() => {
-    fetch("/api/credentials")
+    fetch("/api/gate-codes")
       .then(async (response) => {
-        if (!response.ok) throw new Error("Could not load your guest codes.");
-        return response.json() as Promise<{ credentials: GuestCode[] }>;
+        if (!response.ok) throw new Error("Could not load your gate codes.");
+        return response.json() as Promise<{ codes: GateCodeResponse[] }>;
       })
-      .then(({ credentials }) => setGuestCodes(credentials))
-      .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your guest codes."))
+      .then(({ codes }) => {
+        setGuestCodes(codes.filter((code) => code.kind === "temporary"));
+        setPermanentCodes(codes.filter((code) => code.kind !== "temporary" && code.state === "active").map((code) => ({ ...code, kind: code.kind === "home" ? "household" : "person" })));
+      })
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your gate codes."))
       .finally(() => setReady(true));
   }, []);
 
@@ -457,15 +481,15 @@ export function ResidentHome({
     }
 
     try {
-      const response = await fetch("/api/credentials", {
+      const response = await fetch("/api/gate-codes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: label.trim() || "Guest", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }),
+        body: JSON.stringify({ label: label.trim() || "Guest", kind: "temporary", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }),
       });
-      const result = await response.json() as { credential?: GuestCode; error?: string };
-      if (!response.ok || !result.credential) throw new Error(result.error || "Could not create the guest code.");
-      setGuestCodes((currentCodes) => [result.credential!, ...currentCodes]);
-      setCreatedCode(result.credential);
+      const result = await response.json() as { code?: GuestCode; error?: string };
+      if (!response.ok || !result.code) throw new Error(result.error || "Could not create the guest code.");
+      setGuestCodes((currentCodes) => [result.code!, ...currentCodes]);
+      setCreatedCode(result.code);
       setScreen("success");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create the code.");
@@ -494,7 +518,7 @@ export function ResidentHome({
   async function confirmCancel() {
     if (!cancelTarget) return;
     try {
-      const response = await fetch(`/api/credentials/${cancelTarget.id}`, { method: "DELETE" });
+      const response = await fetch(`/api/gate-codes/${cancelTarget.id}`, { method: "DELETE" });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "Could not cancel the guest code.");
       setGuestCodes((current) => current.map((code) => code.id === cancelTarget.id ? { ...code, revokedAt: new Date().toISOString() } : code));
@@ -507,7 +531,7 @@ export function ResidentHome({
 
   function openHouseCodeDialog() {
     setCodeDialog("household");
-    setCodeTargetId(householdCode?.id || "preview-house");
+    setCodeTargetId(householdCode?.id || "");
     setCodeName(`${householdName} gate code`);
     setCodePin(householdCode?.pin || "");
     setCodeError("");
@@ -521,7 +545,7 @@ export function ResidentHome({
     setCodeError("");
   }
 
-  function savePermanentCode(event: FormEvent<HTMLFormElement>) {
+  async function savePermanentCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (codeDialog === "person" && !codeName.trim()) {
       setCodeError("Enter the person’s name.");
@@ -535,20 +559,24 @@ export function ResidentHome({
       setCodeError("That code is already being used. Please choose another.");
       return;
     }
-
-    if (codeDialog === "household") {
-      setPermanentCodes((current) => {
-        const next: PermanentCode = { id: codeTargetId, label: `${householdName} gate code`, pin: codePin, kind: "household" };
-        return current.some((code) => code.kind === "household")
-          ? current.map((code) => code.kind === "household" ? next : code)
-          : [next, ...current];
-      });
-      setPreviewNotice("Household gate code updated in this preview.");
-    } else {
-      setPermanentCodes((current) => [...current, { id: `preview-${Date.now()}`, label: codeName.trim(), pin: codePin, kind: "person" }]);
-      setPreviewNotice(`${codeName.trim()} was added in this preview.`);
+    try {
+      if (codeDialog === "household" && codeTargetId) {
+        const response = await fetch(`/api/gate-codes/${codeTargetId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: `${householdName} gate code`, pin: codePin }) });
+        const result = await response.json() as { code?: PermanentCode; error?: string };
+        if (!response.ok || !result.code) throw new Error(result.error || "Could not change the home code.");
+        setPermanentCodes((current) => current.map((code) => code.id === codeTargetId ? { ...result.code!, kind: "household" } : code));
+      } else {
+        const isHome = codeDialog === "household";
+        const response = await fetch("/api/gate-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: isHome ? `${householdName} gate code` : codeName.trim(), pin: codePin, kind: isHome ? "home" : "ongoing" }) });
+        const result = await response.json() as { code?: PermanentCode; error?: string };
+        if (!response.ok || !result.code) throw new Error(result.error || "Could not save this gate code.");
+        setPermanentCodes((current) => [...current, { ...result.code!, kind: isHome ? "household" : "person" }]);
+      }
+      setPreviewNotice(codeDialog === "household" ? "Home gate code saved." : `${codeName.trim()} was added.`);
+      setCodeDialog(null);
+    } catch (caught) {
+      setCodeError(caught instanceof Error ? caught.message : "Could not save this gate code.");
     }
-    setCodeDialog(null);
   }
 
   async function signOut() {
@@ -657,10 +685,7 @@ export function ResidentHome({
     <main className="resident-shell">
       <header className="resident-topbar">
         <div className="resident-brand"><Image src="/gatey-icon-192.png" alt="" width={48} height={48} priority /><div><p>Gatey</p><h1>{householdName}</h1></div></div>
-        <span className="resident-preview-chip">Design preview</span>
       </header>
-
-      <aside className="resident-preview-banner"><strong>Safe preview</strong><span>{camerasConfigured ? "Camera snapshots, gate control, party mode, and temporary guest codes are connected. Permanent-code controls are simulated." : "Gate control, party mode, and temporary guest codes are connected. Camera setup and permanent-code controls are simulated."}</span></aside>
 
       {previewNotice ? <div className="resident-toast" role="status"><Check aria-hidden="true" /><span>{previewNotice}</span><button type="button" onClick={() => setPreviewNotice("")} aria-label="Dismiss"><X aria-hidden="true" /></button></div> : null}
 
@@ -691,6 +716,12 @@ export function ResidentHome({
           {currentPartyPhase === "off" ? <button className="resident-row-action" type="button" onClick={openPartyDialog}>Enable<ChevronRight aria-hidden="true" /></button> : partyCanEnd ? <button className="resident-row-action resident-danger-action" type="button" disabled={partyPending} onClick={() => void endParty()}>{partyPending ? "Working…" : currentPartyPhase === "active" ? "End now" : "Cancel"}</button> : <span className="resident-party-in-use">In use</span>}
         </section>
 
+        <section className="resident-gate-guest-section" aria-labelledby="gate-guest-title">
+          <div className="resident-section-title"><div><p className="resident-kicker">Household access</p><h2 id="gate-guest-title">Guest codes</h2></div><button className="resident-add-button" type="button" onClick={openCreate}><Plus aria-hidden="true" />Create</button></div>
+          {!ready ? <p className="resident-loading">Finding your guest codes…</p> : grouped.active.length || grouped.upcoming.length ? <div className="resident-guest-summary-list">{[...grouped.active, ...grouped.upcoming].slice(0, 3).map((code) => <GuestCodeSummaryCard key={code.id} code={code} onOpen={() => setScreen("codes")} />)}</div> : <div className="resident-empty-compact"><Clock3 aria-hidden="true" /><span>No active guest codes.</span></div>}
+          {grouped.active.length + grouped.upcoming.length > 3 ? <button className="resident-view-all-codes" type="button" onClick={() => setScreen("codes")}>See all guest codes</button> : null}
+        </section>
+
         <button className="resident-code-summary" type="button" onClick={() => setScreen("codes")}>
           <span className="resident-feature-icon"><KeyRound aria-hidden="true" /></span>
           <span><small>Your code</small><strong>{householdName} gate code</strong><b>{householdCode ? spacedPin(householdCode.pin) : "Not set"}</b></span>
@@ -708,8 +739,8 @@ export function ResidentHome({
         </section>
 
         <section className="resident-code-section" aria-labelledby="permanent-title">
-          <div className="resident-section-title"><div><p className="resident-kicker">Always works</p><h2 id="permanent-title">Permanent access</h2></div><button className="resident-add-button" type="button" onClick={openPersonCodeDialog}><Plus aria-hidden="true" />Add someone</button></div>
-          {personalCodes.length ? <div className="resident-permanent-list">{personalCodes.map((code) => <article key={code.id}><span className="resident-person-mark">{code.label.slice(0, 1).toUpperCase()}</span><div><h3>{code.label}</h3><p>Permanent gate code</p></div><strong>{spacedPin(code.pin)}</strong></article>)}</div> : <div className="resident-empty-compact"><UsersRound aria-hidden="true" /><span>No one has a separate permanent code.</span></div>}
+          <div className="resident-section-title"><div><p className="resident-kicker">Always works</p><h2 id="permanent-title">Ongoing codes</h2></div><button className="resident-add-button" type="button" onClick={openPersonCodeDialog}><Plus aria-hidden="true" />Add code</button></div>
+          {personalCodes.length ? <div className="resident-permanent-list">{personalCodes.map((code) => <article key={code.id}><span className="resident-person-mark">{code.label.slice(0, 1).toUpperCase()}</span><div><h3>{code.label}</h3><p>{codeLastUsed(code)}</p></div><strong>{spacedPin(code.pin)}</strong></article>)}</div> : <div className="resident-empty-compact"><UsersRound aria-hidden="true" /><span>No ongoing codes yet.</span></div>}
         </section>
 
         <section className="resident-code-section" aria-labelledby="guest-title">
@@ -743,7 +774,7 @@ export function ResidentHome({
 
       {partyDialogOpen ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="party-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Today only</p><h2 id="party-dialog-title">Set up party mode</h2></div><button type="button" disabled={partyPending} onClick={() => setPartyDialogOpen(false)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">The gate will stay open so guests can drive in freely.</p><form onSubmit={(event) => void saveParty(event)}><fieldset className="resident-choice-fieldset" disabled={partyPending}><legend>Starts</legend><label className={partyStartChoice === "now" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "now"} onChange={() => setPartyStartChoice("now")} /><strong>Now</strong><span>Open the gate right away</span></label><label className={partyStartChoice === "later" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "later"} onChange={() => setPartyStartChoice("later")} /><strong>Later today</strong><span>Choose a starting time</span></label></fieldset>{partyStartChoice === "later" ? <label className="resident-time-field">Gate opens<input type="time" value={partyStartTime} onChange={(event) => setPartyStartTime(event.target.value)} required disabled={partyPending} /></label> : null}<label className="resident-time-field">Gate closes<input type="time" value={partyEndTime} onChange={(event) => setPartyEndTime(event.target.value)} required disabled={partyPending} /></label>{partyError ? <p className="resident-form-error" role="alert">{partyError}</p> : null}<button className="resident-primary-button" type="submit" disabled={partyPending}>{partyPending ? "Setting up…" : partyStartChoice === "now" ? "Start party mode" : "Schedule party mode"}</button></form></section></div> : null}
 
-      {codeDialog ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="code-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Design preview</p><h2 id="code-dialog-title">{codeDialog === "household" ? `Change ${householdName} gate code` : "Add permanent access"}</h2></div><button type="button" onClick={() => setCodeDialog(null)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">{codeDialog === "household" ? "Everyone in your household will use this at the keypad." : "Use this for a trusted person who should always be able to enter."}</p><form onSubmit={savePermanentCode}>{codeDialog === "person" ? <label className="resident-field-label" htmlFor="permanent-name">Person&apos;s name<input id="permanent-name" className="resident-input" value={codeName} onChange={(event) => setCodeName(event.target.value)} placeholder="For example, Sarah" autoFocus /></label> : null}<label className="resident-field-label" htmlFor="permanent-pin">Choose a gate code <span>4–6 numbers</span><input id="permanent-pin" className="resident-input resident-pin-input" value={codePin} onChange={(event) => setCodePin(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="off" placeholder="4826" autoFocus={codeDialog === "household"} /></label>{codeError ? <p className="resident-form-error" role="alert">{codeError}</p> : null}<button className="resident-primary-button" type="submit">{codeDialog === "household" ? "Save gate code" : "Add permanent code"}</button><p className="resident-form-note">This preview does not send permanent-code changes to UniFi yet.</p></form></section></div> : null}
+      {codeDialog ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="code-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Gate code</p><h2 id="code-dialog-title">{codeDialog === "household" ? `${householdCode ? "Change" : "Set"} ${householdName} gate code` : "Add ongoing code"}</h2></div><button type="button" onClick={() => setCodeDialog(null)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">{codeDialog === "household" ? "Everyone in your household can use this at the keypad." : "Use this for Sarah, a gardener, deliveries, or anyone else who should always be able to enter."}</p><form onSubmit={(event) => void savePermanentCode(event)}>{codeDialog === "person" ? <label className="resident-field-label" htmlFor="permanent-name">What is this for?<input id="permanent-name" className="resident-input" value={codeName} onChange={(event) => setCodeName(event.target.value)} placeholder="For example, Sarah or Gardener" autoFocus /></label> : null}<label className="resident-field-label" htmlFor="permanent-pin">Choose a gate code <span>4–6 numbers</span><input id="permanent-pin" className="resident-input resident-pin-input" value={codePin} onChange={(event) => setCodePin(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="off" placeholder="4826" autoFocus={codeDialog === "household"} /></label>{codeError ? <p className="resident-form-error" role="alert">{codeError}</p> : null}<button className="resident-primary-button" type="submit">{codeDialog === "household" ? "Save gate code" : "Add code"}</button></form></section></div> : null}
 
       {cancelTarget ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-title"><p className="resident-kicker">Please confirm</p><h2 id="cancel-title">Cancel {cancelTarget.label}&apos;s code?</h2><p className="resident-dialog-intro">The code <strong>{spacedPin(cancelTarget.pin)}</strong> will stop working right away.</p><div className="resident-dialog-actions"><button className="resident-danger-button" type="button" onClick={confirmCancel}>Yes, cancel code</button><button className="resident-secondary-button" type="button" onClick={() => setCancelTarget(null)}>Keep it active</button></div></section></div> : null}
 

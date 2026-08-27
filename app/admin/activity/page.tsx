@@ -17,6 +17,9 @@ function actionLabel(event: AuditEvent) {
   if (event.action === "party.cancelled") return event.outcome === "succeeded" ? "Canceled party mode" : "Tried to cancel party mode";
   if (event.action === "guest-code.created") return event.outcome === "succeeded" ? "Created a guest code" : "Tried to create a guest code";
   if (event.action === "guest-code.cancelled") return event.outcome === "succeeded" ? "Canceled a guest code" : "Tried to cancel a guest code";
+  if (event.action === "gate-code.created") return "Created a gate code";
+  if (event.action === "gate-code.disabled") return "Disabled a gate code";
+  if (event.action === "gate-code.migrated") return "Moved a code to Gatey";
   return event.action.replaceAll(".", " ");
 }
 
