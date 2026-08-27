@@ -638,9 +638,20 @@ button { -webkit-tap-highlight-color: transparent; }
   box-shadow: 0 0 0 4px #f3e6c9;
 }
 
-.resident-gate-open .resident-open-button,
-.resident-gate-held .resident-open-button {
+.resident-gate-open .resident-open-button {
   background: #31734f;
+}
+
+.resident-gate-unknown .resident-gate-state span {
+  background: #718078;
+  box-shadow: 0 0 0 4px #e3e6e3;
+}
+
+.resident-gate-error {
+  margin: 12px 0 0;
+  color: #9c332b;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .resident-party-card,

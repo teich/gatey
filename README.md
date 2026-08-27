@@ -17,7 +17,7 @@ Public sign-up is disabled. The initial organization is `oren-home`, preserving 
 
 ## Resident experience preview
 
-The resident home is currently a safe interaction preview for the new gate-first experience. When camera stream settings are present, the two camera views are authenticated, on-demand snapshots. The **Open gate** button, permanent-code changes, and party mode are still simulated and labeled in the UI. Existing temporary guest-code creation, sharing, listing, and cancellation remain connected to UniFi. The preview includes installable-app metadata so it can be evaluated from a phone home screen before the remaining controls are wired.
+The resident home is currently a safe interaction preview for the new gate-first experience. When camera stream settings are present, the two camera views are authenticated, on-demand snapshots. The **Open gate** button and the gate's physical state are connected to UniFi; Gatey shares one controller status read across residents for five seconds and refreshes again after an open request. Permanent-code changes and party mode are still simulated and labeled in the UI. Existing temporary guest-code creation, sharing, listing, and cancellation remain connected to UniFi. The preview includes installable-app metadata so it can be evaluated from a phone home screen before the remaining controls are wired.
 
 ## Camera snapshots
 

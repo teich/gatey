@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -30,7 +30,7 @@ import { authClient } from "@/lib/auth-client";
 type Duration = "today" | "week" | "custom";
 type CodeState = "active" | "upcoming" | "expired" | "revoked";
 type Screen = "gate" | "codes" | "more" | "create" | "success";
-type GateState = "closed" | "opening" | "open";
+type GateState = "closed" | "opening" | "open" | "unknown";
 type CameraView = "person" | "road";
 
 type GuestCode = {
@@ -223,7 +223,9 @@ export function ResidentHome({
     ];
   });
   const [ready, setReady] = useState(false);
-  const [gateState, setGateState] = useState<GateState>("closed");
+  const [gateState, setGateState] = useState<GateState>("unknown");
+  const [gateOpening, setGateOpening] = useState(false);
+  const [gateError, setGateError] = useState("");
   const [cameraUpdatedAt, setCameraUpdatedAt] = useState(() => new Date());
   const [cameraRefreshing, setCameraRefreshing] = useState(false);
   const [cameraRevision, setCameraRevision] = useState(0);
@@ -272,6 +274,27 @@ export function ResidentHome({
       .finally(() => setReady(true));
   }, []);
 
+  const refreshGate = useCallback(async () => {
+    const response = await fetch("/api/gate", { cache: "no-store" });
+    const payload = await response.json() as { state?: GateState; error?: string };
+    if (!response.ok || !payload.state) throw new Error(payload.error || "Gate status is unavailable.");
+    setGateState(payload.state);
+    setGateError("");
+  }, []);
+
+  useEffect(() => {
+    const fetchInitialStatus = window.setTimeout(() => {
+      void refreshGate().catch((caught) => setGateError(caught instanceof Error ? caught.message : "Gate status is unavailable."));
+    }, 0);
+    const timer = window.setInterval(() => {
+      void refreshGate().catch((caught) => setGateError(caught instanceof Error ? caught.message : "Gate status is unavailable."));
+    }, 5_000);
+    return () => {
+      window.clearTimeout(fetchInitialStatus);
+      window.clearInterval(timer);
+    };
+  }, [refreshGate]);
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
@@ -293,7 +316,6 @@ export function ResidentHome({
   const householdCode = permanentCodes.find((code) => code.kind === "household");
   const personalCodes = permanentCodes.filter((code) => code.kind === "person");
   const currentPartyPhase = partyPhase(party, now);
-  const effectiveGateState = currentPartyPhase === "active" ? "held" : gateState;
 
   function refreshCameras() {
     if (cameraRefreshing) return;
@@ -305,11 +327,21 @@ export function ResidentHome({
     }, 700);
   }
 
-  function openGate() {
-    if (gateState !== "closed" || currentPartyPhase === "active") return;
-    setGateState("opening");
-    window.setTimeout(() => setGateState("open"), 1_400);
-    window.setTimeout(() => setGateState("closed"), 6_000);
+  async function openGate() {
+    if (gateState !== "closed" || gateOpening) return;
+    setGateOpening(true);
+    setGateError("");
+    try {
+      const response = await fetch("/api/gate", { method: "POST" });
+      const payload = await response.json() as { state?: GateState; error?: string };
+      if (!response.ok || !payload.state) throw new Error(payload.error || "Gate could not be opened. Try again.");
+      setGateState(payload.state);
+      window.setTimeout(() => void refreshGate().catch((caught) => setGateError(caught instanceof Error ? caught.message : "Gate status is unavailable.")), 1_200);
+    } catch (caught) {
+      setGateError(caught instanceof Error ? caught.message : "Gate could not be opened. Try again.");
+    } finally {
+      setGateOpening(false);
+    }
   }
 
   function openPartyDialog() {
@@ -341,7 +373,6 @@ export function ResidentHome({
 
   function endParty() {
     setParty(null);
-    setGateState("closed");
     setPreviewNotice("Party mode preview ended.");
   }
 
@@ -570,7 +601,7 @@ export function ResidentHome({
     );
   }
 
-  const gateLabel = effectiveGateState === "held" ? "Gate is held open" : effectiveGateState === "opening" ? "Gate is opening" : effectiveGateState === "open" ? "Gate is open" : "Gate is closed";
+  const gateLabel = gateState === "opening" || gateOpening ? "Gate is opening" : gateState === "open" ? "Gate is open" : gateState === "closed" ? "Gate is closed" : "Checking gate…";
 
   return (
     <main className="resident-shell">
@@ -579,7 +610,7 @@ export function ResidentHome({
         <span className="resident-preview-chip">Design preview</span>
       </header>
 
-      <aside className="resident-preview-banner"><strong>Safe preview</strong><span>{camerasConfigured ? "Camera snapshots and temporary guest codes are connected. Gate, permanent-code, and party controls are simulated." : "Temporary guest codes are connected. Camera setup, gate, permanent-code, and party controls are simulated."}</span></aside>
+      <aside className="resident-preview-banner"><strong>Safe preview</strong><span>{camerasConfigured ? "Camera snapshots, gate control, and temporary guest codes are connected. Permanent-code and party controls are simulated." : "Gate control and temporary guest codes are connected. Camera setup, permanent-code, and party controls are simulated."}</span></aside>
 
       {previewNotice ? <div className="resident-toast" role="status"><Check aria-hidden="true" /><span>{previewNotice}</span><button type="button" onClick={() => setPreviewNotice("")} aria-label="Dismiss"><X aria-hidden="true" /></button></div> : null}
 
@@ -592,12 +623,13 @@ export function ResidentHome({
           <div className="resident-camera-meta"><p className="resident-camera-time">Refreshed {formatTime(cameraUpdatedAt)}</p><button className="resident-refresh-button" type="button" onClick={refreshCameras} disabled={cameraRefreshing}><RefreshCw className={cameraRefreshing ? "spinning" : ""} aria-hidden="true" />{cameraRefreshing ? "Refreshing" : "Refresh"}</button></div>
         </section>
 
-        <section className={`resident-gate-control resident-gate-${effectiveGateState}`} aria-labelledby="gate-state">
+        <section className={`resident-gate-control resident-gate-${gateOpening ? "opening" : gateState}`} aria-labelledby="gate-state">
           <p className="resident-gate-state" id="gate-state"><span aria-hidden="true" />{gateLabel}</p>
-          <button type="button" className="resident-open-button" onClick={openGate} disabled={effectiveGateState !== "closed"}>
-            {effectiveGateState === "closed" ? <LockKeyhole aria-hidden="true" /> : <DoorOpen aria-hidden="true" />}
-            <span>{effectiveGateState === "closed" ? "Open gate" : effectiveGateState === "opening" ? "Opening…" : effectiveGateState === "held" ? "Party mode is on" : "Gate is open"}</span>
+          <button type="button" className="resident-open-button" onClick={() => void openGate()} disabled={gateState !== "closed" || gateOpening}>
+            {gateState === "closed" && !gateOpening ? <LockKeyhole aria-hidden="true" /> : <DoorOpen aria-hidden="true" />}
+            <span>{gateState === "closed" && !gateOpening ? "Open gate" : gateState === "unknown" ? "Checking gate…" : gateState === "open" && !gateOpening ? "Gate is open" : "Opening…"}</span>
           </button>
+          {gateError ? <p className="resident-gate-error" role="alert">{gateError}</p> : null}
         </section>
 
         <section className={`resident-party-card resident-party-${currentPartyPhase}`} aria-labelledby="party-title">

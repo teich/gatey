@@ -5,7 +5,14 @@ import { Agent, request as httpsRequest } from "node:https";
 import type { Credential } from "@/lib/credentials";
 
 type ApiResponse<T> = { code?: string; data?: T; msg?: string; message?: string };
-type Door = { id: string; name: string; type: string };
+type Door = {
+  id: string;
+  name: string;
+  type: string;
+  is_bind_hub?: boolean;
+  door_lock_relay_status?: string | null;
+  door_position_status?: string | null;
+};
 
 type UnifiVisitor = {
   id: string;
@@ -32,6 +39,17 @@ type UnifiUser = {
 };
 
 const insecureUnifiAgent = new Agent({ rejectUnauthorized: false });
+const GATE_STATUS_TTL_MS = 5_000;
+
+type CachedGateStatus = {
+  value: GateStatus;
+  expiresAt: number;
+};
+
+const globalForGateStatus = globalThis as unknown as {
+  gateyGateStatus?: CachedGateStatus;
+  gateyGateStatusPromise?: Promise<GateStatus>;
+};
 
 export type VisitorInventoryItem = {
   id: string;
@@ -52,6 +70,17 @@ export type UserInventoryItem = {
   policyNames: string[];
   hasNfcCard: boolean;
 };
+
+export type GateStatus = {
+  state: "closed" | "opening" | "open" | "unknown";
+  position: string | null;
+  relay: string | null;
+};
+
+function cacheGateStatus(value: GateStatus) {
+  globalForGateStatus.gateyGateStatus = { value, expiresAt: Date.now() + GATE_STATUS_TTL_MS };
+  return value;
+}
 
 function timestampToIso(timestamp?: number): string | undefined {
   if (typeof timestamp !== "number") return undefined;
@@ -115,11 +144,54 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 async function gateDoor(): Promise<Door> {
   const { doorName } = config();
-  const groups = await request<Array<{ resource_topologies?: Array<{ resources?: Door[] }> }>>("/door_groups/topology");
-  const doors = groups.flatMap((group) => group.resource_topologies?.flatMap((floor) => floor.resources || []) || []);
+  const doors = await request<Door[]>("/doors");
   const door = doors.find((item) => item.name.trim().toLowerCase() === doorName.toLowerCase());
   if (!door) throw new Error(`UniFi could not find the '${doorName}' gate.`);
   return door;
+}
+
+function gateStatus(door: Door): GateStatus {
+  const position = door.door_position_status || null;
+  const relay = door.door_lock_relay_status || null;
+
+  if (position === "open") return { state: "open", position, relay };
+  if (position === "close" && relay === "unlock") return { state: "opening", position, relay };
+  if (position === "close") return { state: "closed", position, relay };
+  return { state: "unknown", position, relay };
+}
+
+export async function getGateStatus(options: { fresh?: boolean } = {}): Promise<GateStatus> {
+  const cached = globalForGateStatus.gateyGateStatus;
+  if (!options.fresh && cached && cached.expiresAt > Date.now()) return cached.value;
+
+  const existing = globalForGateStatus.gateyGateStatusPromise;
+  if (existing) return existing;
+
+  const statusRequest = gateDoor()
+    .then(gateStatus)
+    .then(cacheGateStatus)
+    .finally(() => {
+      delete globalForGateStatus.gateyGateStatusPromise;
+    });
+  globalForGateStatus.gateyGateStatusPromise = statusRequest;
+  return statusRequest;
+}
+
+export async function unlockGate(actor: { id: string; name: string }): Promise<GateStatus> {
+  const door = await gateDoor();
+  if (door.is_bind_hub === false) throw new Error("UniFi cannot remotely open this gate because it is not connected to a hub.");
+
+  await request<"success">(`/doors/${encodeURIComponent(door.id)}/unlock?control_cmd=open`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      actor_id: actor.id,
+      actor_name: actor.name.slice(0, 120),
+      extra: { source: "gatey" },
+    }),
+  });
+
+  return cacheGateStatus(gateStatus(await gateDoor()));
 }
 
 function allDaySchedule() {
