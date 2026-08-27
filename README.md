@@ -71,3 +71,17 @@ Then open the local URL printed by Next.js. Use `npm run build` for a production
 - Keep `BETTER_AUTH_SECRET`, the UniFi token, and the SQLite file outside version control.
 - Set `GATEY_DB_PATH` to an absolute persistent path under systemd.
 - Back up the SQLite database independently of the application.
+
+Deploy the pushed `main` branch from a trusted development machine with:
+
+```bash
+npm run deploy:prod
+```
+
+The deployment script builds the pushed `main` branch locally with Node 26,
+uploads the build, and connects as root to manage systemd and the database
+backup directory. It refuses a dirty production checkout, creates a consistent
+SQLite backup, fast-forwards from `origin/main`, atomically swaps the build and
+dependencies, restarts, and checks the local sign-in page. If that check fails,
+it restores the previous commit and build. Building locally keeps deployment
+within the production host's small memory limit.
