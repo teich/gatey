@@ -15,6 +15,22 @@ Gatey uses Better Auth with its Organization, Admin, and Username plugins:
 
 Public sign-up is disabled. The initial organization is `oren-home`, preserving the household ID used by the existing pilot data.
 
+## Resident experience preview
+
+The resident home is currently a safe interaction preview for the new gate-first experience. When camera stream settings are present, the two camera views are authenticated, on-demand snapshots. The **Open gate** button, permanent-code changes, and party mode are still simulated and labeled in the UI. Existing temporary guest-code creation, sharing, listing, and cancellation remain connected to UniFi. The preview includes installable-app metadata so it can be evaluated from a phone home screen before the remaining controls are wired.
+
+## Camera snapshots
+
+Gatey deliberately does not send RTSPS addresses to the phone. The server uses its local `ffmpeg` installation to capture one JPEG frame at a time and returns it only through the signed-in, same-origin snapshot route. Add these settings to the environment where Gatey runs:
+
+```bash
+GATEY_CAMERA_PERSON_RTSPS_URL=rtsps://...
+GATEY_CAMERA_ROAD_RTSPS_URL=rtsps://...
+GATEY_CAMERA_INSECURE_TLS=false
+```
+
+Set `GATEY_CAMERA_INSECURE_TLS=true` only for a private/self-signed camera certificate. The stream remains encrypted, but its certificate will not be verified; use it only on the trusted local camera network. `ffmpeg` must be installed on the production host.
+
 ## Requirements
 
 - Node.js 26 or later (Gatey uses the built-in `node:sqlite` module)

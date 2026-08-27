@@ -2,11 +2,36 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Camera,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Copy,
+  DoorOpen,
+  House,
+  KeyRound,
+  LockKeyhole,
+  LogOut,
+  PartyPopper,
+  Plus,
+  RefreshCw,
+  Settings,
+  Share2,
+  UsersRound,
+  X,
+} from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 
 type Duration = "today" | "week" | "custom";
 type CodeState = "active" | "upcoming" | "expired" | "revoked";
+type Screen = "gate" | "codes" | "more" | "create" | "success";
+type GateState = "closed" | "opening" | "open";
+type CameraView = "person" | "road";
 
 type GuestCode = {
   id: string;
@@ -15,6 +40,18 @@ type GuestCode = {
   startsAt: string;
   endsAt: string;
   revokedAt?: string;
+};
+
+type PermanentCode = {
+  id: string;
+  label: string;
+  pin: string;
+  kind: "household" | "person";
+};
+
+type PartyWindow = {
+  startsAt: string;
+  endsAt: string;
 };
 
 function endOfDay(date: Date) {
@@ -31,18 +68,22 @@ function getState(code: GuestCode, now = new Date()): CodeState {
 }
 
 function spacedPin(pin: string) {
+  if (pin.length <= 4) return pin.split("").join(" ");
   return `${pin.slice(0, 3)} ${pin.slice(3)}`;
 }
 
 function formatDateTime(value: string, includeYear = false) {
-  const date = new Date(value);
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
     year: includeYear ? "numeric" : undefined,
     hour: "numeric",
     minute: "2-digit",
-  }).format(date);
+  }).format(new Date(value));
+}
+
+function formatTime(value: string | Date) {
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
 function codeTiming(code: GuestCode, state: CodeState) {
@@ -52,10 +93,9 @@ function codeTiming(code: GuestCode, state: CodeState) {
 
   const end = new Date(code.endsAt);
   const today = new Date();
-  const sameDay = end.toDateString() === today.toDateString();
-  return sameDay
-    ? `Until tonight at ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(end)}`
-    : `Until ${formatDateTime(code.endsAt, end.getFullYear() !== today.getFullYear())}`;
+  return end.toDateString() === today.toDateString()
+    ? `Works until ${formatTime(end)} today`
+    : `Works until ${formatDateTime(code.endsAt, end.getFullYear() !== today.getFullYear())}`;
 }
 
 function toLocalInputValue(date: Date) {
@@ -63,7 +103,40 @@ function toLocalInputValue(date: Date) {
   return local.toISOString().slice(0, 16);
 }
 
-function CodeCard({
+function toTimeInputValue(date: Date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function fromTodayTime(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  const result = new Date();
+  result.setHours(hours, minutes, 0, 0);
+  return result;
+}
+
+function defaultPartyEnd() {
+  const result = new Date();
+  result.setMinutes(result.getMinutes() < 30 ? 30 : 60, 0, 0);
+  result.setHours(result.getHours() + 3);
+  return result > endOfDay(new Date()) ? endOfDay(new Date()) : result;
+}
+
+function partyPhase(party: PartyWindow | null, now: number) {
+  if (!party || new Date(party.endsAt).getTime() <= now) return "off" as const;
+  if (new Date(party.startsAt).getTime() > now) return "scheduled" as const;
+  return "active" as const;
+}
+
+function countdown(until: string, now: number) {
+  const minutes = Math.max(0, Math.ceil((new Date(until).getTime() - now) / 60_000));
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (!hours) return `${remainingMinutes} min remaining`;
+  if (!remainingMinutes) return `${hours} ${hours === 1 ? "hour" : "hours"} remaining`;
+  return `${hours} hr ${remainingMinutes} min remaining`;
+}
+
+function GuestCodeCard({
   code,
   onCopy,
   onShare,
@@ -80,29 +153,89 @@ function CodeCard({
   const stateText = state === "active" ? "Works now" : state === "upcoming" ? "Scheduled" : state === "revoked" ? "Canceled" : "Expired";
 
   return (
-    <article className={`code-card ${state}`}>
-      <div className="code-card-top">
+    <article className={`resident-guest-card resident-guest-${state}`}>
+      <div className="resident-guest-heading">
         <div>
           <h3>{code.label || "Guest"}</h3>
-          <p className={`status ${state}`}><span aria-hidden="true" /> {stateText}</p>
+          <p className={`resident-code-status resident-code-status-${state}`}><span aria-hidden="true" />{stateText}</p>
         </div>
+        <p className="resident-small-pin" aria-label={`Gate code ${code.pin.split("").join(" ")}`}>{spacedPin(code.pin)}</p>
       </div>
-      <p className="pin" aria-label={`Gate code ${code.pin.split("").join(" ")}`}>{spacedPin(code.pin)}</p>
-      <p className="timing">{codeTiming(code, state)}</p>
-      <div className="card-actions">
-        <button className="soft-button" type="button" onClick={() => onCopy(code)}>{copied ? "Copied!" : "Copy"}</button>
-        <button className="soft-button" type="button" onClick={() => onShare(code)}>Share</button>
-        {onCancel && <button className="text-button danger" type="button" onClick={() => onCancel(code)}>Cancel code</button>}
+      <p className="resident-code-timing">{codeTiming(code, state)}</p>
+      <div className="resident-card-actions">
+        <button type="button" onClick={() => onCopy(code)}><Copy aria-hidden="true" />{copied ? "Copied" : "Copy"}</button>
+        <button type="button" onClick={() => onShare(code)}><Share2 aria-hidden="true" />Share</button>
+        {onCancel ? <button className="resident-cancel-link" type="button" onClick={() => onCancel(code)}>Cancel</button> : null}
       </div>
     </article>
   );
 }
 
-export function ResidentHome({ householdName, userName, isSystemAdmin }: { householdName: string; userName: string; isSystemAdmin: boolean }) {
+function CameraSnapshot({
+  camera,
+  label,
+  revision,
+  configured,
+}: {
+  camera: CameraView;
+  label: string;
+  revision: number;
+  configured: boolean;
+}) {
+  if (!configured) return null;
+
+  return <CameraSnapshotImage key={`${camera}-${revision}`} camera={camera} label={label} revision={revision} />;
+}
+
+function CameraSnapshotImage({ camera, label, revision }: { camera: CameraView; label: string; revision: number }) {
+  const [available, setAvailable] = useState(true);
+
+  if (!available) return <em className="resident-camera-unavailable">Camera unavailable</em>;
+
+  // This same-origin image request carries the resident's session cookie; Next's image optimizer cannot.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className="resident-camera-image" src={`/api/cameras/${camera}/snapshot?refresh=${revision}`} alt={`Latest ${label.toLowerCase()} camera snapshot`} onError={() => setAvailable(false)} />;
+}
+
+export function ResidentHome({
+  householdName,
+  userName,
+  isSystemAdmin,
+  permanentCodes: storedPermanentCodes,
+  camerasConfigured,
+}: {
+  householdName: string;
+  userName: string;
+  isSystemAdmin: boolean;
+  permanentCodes: Array<{ id: string; label: string; pin: string }>;
+  camerasConfigured: boolean;
+}) {
   const router = useRouter();
-  const [codes, setCodes] = useState<GuestCode[]>([]);
+  const [screen, setScreen] = useState<Screen>("gate");
+  const [guestCodes, setGuestCodes] = useState<GuestCode[]>([]);
+  const [permanentCodes, setPermanentCodes] = useState<PermanentCode[]>(() => {
+    if (storedPermanentCodes.length) {
+      return storedPermanentCodes.map((code, index) => ({ ...code, kind: index === 0 ? "household" : "person" }));
+    }
+    return [
+      { id: "preview-house", label: `${householdName} gate code`, pin: "4826", kind: "household" },
+      { id: "preview-sarah", label: "Sarah", pin: "1937", kind: "person" },
+    ];
+  });
   const [ready, setReady] = useState(false);
-  const [view, setView] = useState<"home" | "create" | "success">("home");
+  const [gateState, setGateState] = useState<GateState>("closed");
+  const [cameraUpdatedAt, setCameraUpdatedAt] = useState(() => new Date());
+  const [cameraRefreshing, setCameraRefreshing] = useState(false);
+  const [cameraRevision, setCameraRevision] = useState(0);
+  const [expandedCamera, setExpandedCamera] = useState<CameraView | null>(null);
+  const [party, setParty] = useState<PartyWindow | null>(null);
+  const [partyDialogOpen, setPartyDialogOpen] = useState(false);
+  const [partyStartChoice, setPartyStartChoice] = useState<"now" | "later">("now");
+  const [partyStartTime, setPartyStartTime] = useState(() => toTimeInputValue(new Date(Date.now() + 30 * 60_000)));
+  const [partyEndTime, setPartyEndTime] = useState(() => toTimeInputValue(defaultPartyEnd()));
+  const [partyError, setPartyError] = useState("");
+  const [now, setNow] = useState(() => Date.now());
+
   const [label, setLabel] = useState("");
   const [duration, setDuration] = useState<Duration>("today");
   const [customStart, setCustomStart] = useState("");
@@ -112,6 +245,14 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
   const [cancelTarget, setCancelTarget] = useState<GuestCode | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
   const [error, setError] = useState("");
+
+  const [codeDialog, setCodeDialog] = useState<"household" | "person" | null>(null);
+  const [codeTargetId, setCodeTargetId] = useState("");
+  const [codeName, setCodeName] = useState("");
+  const [codePin, setCodePin] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [previewNotice, setPreviewNotice] = useState("");
+
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -126,41 +267,101 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
         if (!response.ok) throw new Error("Could not load your guest codes.");
         return response.json() as Promise<{ credentials: GuestCode[] }>;
       })
-      .then(({ credentials }) => setCodes(credentials))
+      .then(({ credentials }) => setGuestCodes(credentials))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your guest codes."))
       .finally(() => setReady(true));
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const grouped = useMemo(() => {
     const active: GuestCode[] = [];
     const upcoming: GuestCode[] = [];
     const past: GuestCode[] = [];
-    codes.forEach((code) => {
+    guestCodes.forEach((code) => {
       const state = getState(code);
       if (state === "active") active.push(code);
       else if (state === "upcoming") upcoming.push(code);
       else past.push(code);
     });
     return { active, upcoming, past };
-  }, [codes]);
+  }, [guestCodes]);
 
-  function openCreate() {
-    const now = new Date();
-    setLabel("");
-    setDuration("today");
-    setCustomStart(toLocalInputValue(now));
-    setCustomEnd(toLocalInputValue(endOfDay(now)));
-    setError("");
-    setView("create");
+  const householdCode = permanentCodes.find((code) => code.kind === "household");
+  const personalCodes = permanentCodes.filter((code) => code.kind === "person");
+  const currentPartyPhase = partyPhase(party, now);
+  const effectiveGateState = currentPartyPhase === "active" ? "held" : gateState;
+
+  function refreshCameras() {
+    if (cameraRefreshing) return;
+    setCameraRefreshing(true);
+    setCameraRevision((revision) => revision + 1);
+    window.setTimeout(() => {
+      setCameraUpdatedAt(new Date());
+      setCameraRefreshing(false);
+    }, 700);
   }
 
-  async function createCode(event: FormEvent) {
-    event.preventDefault();
-    const now = new Date();
-    let startsAt = now;
-    let endsAt = endOfDay(now);
+  function openGate() {
+    if (gateState !== "closed" || currentPartyPhase === "active") return;
+    setGateState("opening");
+    window.setTimeout(() => setGateState("open"), 1_400);
+    window.setTimeout(() => setGateState("closed"), 6_000);
+  }
 
-    if (duration === "week") endsAt = endOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 6));
+  function openPartyDialog() {
+    const later = new Date(Date.now() + 30 * 60_000);
+    setPartyStartChoice("now");
+    setPartyStartTime(toTimeInputValue(later));
+    setPartyEndTime(toTimeInputValue(defaultPartyEnd()));
+    setPartyError("");
+    setPartyDialogOpen(true);
+  }
+
+  function saveParty(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const startsAt = partyStartChoice === "now" ? new Date() : fromTodayTime(partyStartTime);
+    const endsAt = fromTodayTime(partyEndTime);
+    if (partyStartChoice === "later" && startsAt <= new Date()) {
+      setPartyError("Choose a start time later today.");
+      return;
+    }
+    if (endsAt <= startsAt) {
+      setPartyError("The closing time must be after the starting time.");
+      return;
+    }
+    setParty({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+    setNow(Date.now());
+    setPartyDialogOpen(false);
+    setPreviewNotice(partyStartChoice === "now" ? "Party mode preview started." : "Party mode preview scheduled.");
+  }
+
+  function endParty() {
+    setParty(null);
+    setGateState("closed");
+    setPreviewNotice("Party mode preview ended.");
+  }
+
+  function openCreate() {
+    const current = new Date();
+    setLabel("");
+    setDuration("today");
+    setCustomStart(toLocalInputValue(current));
+    setCustomEnd(toLocalInputValue(endOfDay(current)));
+    setError("");
+    setScreen("create");
+  }
+
+  async function createCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const current = new Date();
+    let startsAt = current;
+    let endsAt = endOfDay(current);
+
+    if (duration === "week") endsAt = endOfDay(new Date(current.getFullYear(), current.getMonth(), current.getDate() + 6));
     if (duration === "custom") {
       startsAt = new Date(customStart);
       endsAt = new Date(customEnd);
@@ -182,16 +383,15 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
       });
       const result = await response.json() as { credential?: GuestCode; error?: string };
       if (!response.ok || !result.credential) throw new Error(result.error || "Could not create the guest code.");
-      const code = result.credential;
-      setCodes((current) => [code, ...current]);
-      setCreatedCode(code);
-      setView("success");
+      setGuestCodes((currentCodes) => [result.credential!, ...currentCodes]);
+      setCreatedCode(result.credential);
+      setScreen("success");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create the code.");
     }
   }
 
-  async function copyCode(code: GuestCode) {
+  async function copyCode(code: GuestCode | PermanentCode) {
     await navigator.clipboard.writeText(code.pin);
     setCopiedId(code.id);
   }
@@ -199,7 +399,11 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
   async function shareCode(code: GuestCode) {
     const message = `${code.label}'s Bennett Valley Gate code is ${spacedPin(code.pin)}. ${codeTiming(code, getState(code))}.`;
     if (navigator.share) {
-      try { await navigator.share({ title: "Bennett Valley Gate code", text: message }); } catch { /* The share sheet was dismissed. */ }
+      try {
+        await navigator.share({ title: "Bennett Valley Gate code", text: message });
+      } catch {
+        // The share sheet was dismissed.
+      }
     } else {
       await navigator.clipboard.writeText(message);
       setCopiedId(code.id);
@@ -212,7 +416,7 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
       const response = await fetch(`/api/credentials/${cancelTarget.id}`, { method: "DELETE" });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "Could not cancel the guest code.");
-      setCodes((current) => current.map((code) => code.id === cancelTarget.id ? { ...code, revokedAt: new Date().toISOString() } : code));
+      setGuestCodes((current) => current.map((code) => code.id === cancelTarget.id ? { ...code, revokedAt: new Date().toISOString() } : code));
       setCancelTarget(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not cancel the guest code.");
@@ -220,10 +424,51 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
     }
   }
 
-  const now = new Date();
-  const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening";
-  const today = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(now);
-  const firstName = userName.trim().split(/\s+/)[0] || "there";
+  function openHouseCodeDialog() {
+    setCodeDialog("household");
+    setCodeTargetId(householdCode?.id || "preview-house");
+    setCodeName(`${householdName} gate code`);
+    setCodePin(householdCode?.pin || "");
+    setCodeError("");
+  }
+
+  function openPersonCodeDialog() {
+    setCodeDialog("person");
+    setCodeTargetId("");
+    setCodeName("");
+    setCodePin("");
+    setCodeError("");
+  }
+
+  function savePermanentCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (codeDialog === "person" && !codeName.trim()) {
+      setCodeError("Enter the person’s name.");
+      return;
+    }
+    if (!/^\d{4,6}$/.test(codePin)) {
+      setCodeError("Use 4 to 6 numbers.");
+      return;
+    }
+    if (permanentCodes.some((code) => code.pin === codePin && code.id !== codeTargetId)) {
+      setCodeError("That code is already being used. Please choose another.");
+      return;
+    }
+
+    if (codeDialog === "household") {
+      setPermanentCodes((current) => {
+        const next: PermanentCode = { id: codeTargetId, label: `${householdName} gate code`, pin: codePin, kind: "household" };
+        return current.some((code) => code.kind === "household")
+          ? current.map((code) => code.kind === "household" ? next : code)
+          : [next, ...current];
+      });
+      setPreviewNotice("Household gate code updated in this preview.");
+    } else {
+      setPermanentCodes((current) => [...current, { id: `preview-${Date.now()}`, label: codeName.trim(), pin: codePin, kind: "person" }]);
+      setPreviewNotice(`${codeName.trim()} was added in this preview.`);
+    }
+    setCodeDialog(null);
+  }
 
   async function signOut() {
     await authClient.signOut();
@@ -240,16 +485,10 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
     setPasswordDialogOpen(true);
   }
 
-  function closePasswordDialog() {
-    if (passwordPending) return;
-    setPasswordDialogOpen(false);
-  }
-
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPasswordError("");
     setPasswordSuccess("");
-
     if (newPassword.length < 8) {
       setPasswordError("Your new password must be at least 8 characters.");
       return;
@@ -261,21 +500,15 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
 
     setPasswordPending(true);
     try {
-      const result = await authClient.changePassword({
-        currentPassword,
-        newPassword,
-        revokeOtherSessions: true,
-      });
-
+      const result = await authClient.changePassword({ currentPassword, newPassword, revokeOtherSessions: true });
       if (result.error) {
         setPasswordError(result.error.message || "Could not change your password.");
         return;
       }
-
       setCurrentPassword("");
       setNewPassword("");
       setPasswordConfirmation("");
-      setPasswordSuccess("Password changed. You have been signed out of your other devices.");
+      setPasswordSuccess("Password changed. Your other devices have been signed out.");
     } catch {
       setPasswordError("Could not change your password. Check your connection and try again.");
     } finally {
@@ -283,76 +516,156 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
     }
   }
 
-  if (view === "create") {
+  function renderFlowHeader(title: string, backTo: Screen) {
     return (
-      <main className="app-shell flow-shell">
-        <header className="flow-header"><button className="back-button" type="button" onClick={() => setView("home")} aria-label="Back to home">←</button><p>Create guest code</p><span /></header>
-        <form className="create-form" onSubmit={createCode}>
-          <div className="flow-intro"><p className="eyebrow">New guest</p><h1>Who is this for?</h1><p>A name helps everyone at home remember the code.</p></div>
-          <label className="field-label" htmlFor="guest-name">Guest name <span>Optional</span></label>
-          <input id="guest-name" className="text-input" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Susan, gardener, delivery…" autoFocus />
+      <header className="resident-flow-header">
+        <button type="button" onClick={() => setScreen(backTo)} aria-label={`Back to ${backTo}`}><ArrowLeft aria-hidden="true" /></button>
+        <strong>{title}</strong>
+        <span />
+      </header>
+    );
+  }
 
-          <fieldset className="duration-fieldset">
+  if (screen === "create") {
+    const weekEnd = new Date();
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    return (
+      <main className="resident-shell resident-flow-shell">
+        {renderFlowHeader("Create guest code", "codes")}
+        <form className="resident-create-form" onSubmit={createCode}>
+          <div className="resident-flow-intro"><p className="resident-kicker">New guest</p><h1>Who is this for?</h1><p>A name helps everyone at home recognize the code later.</p></div>
+          <label className="resident-field-label" htmlFor="guest-name">Guest name <span>Optional</span></label>
+          <input id="guest-name" className="resident-input" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Susan, gardener, delivery…" autoFocus />
+
+          <fieldset className="resident-duration-fieldset">
             <legend>How long should it work?</legend>
-            <div className="duration-options">
-              <label className={duration === "today" ? "selected" : ""}><input type="radio" name="duration" value="today" checked={duration === "today"} onChange={() => setDuration("today")} /><strong>Today</strong><span>Until 11:59 PM</span></label>
-              <label className={duration === "week" ? "selected" : ""}><input type="radio" name="duration" value="week" checked={duration === "week"} onChange={() => setDuration("week")} /><strong>7 days</strong><span>Through next Tuesday</span></label>
-              <label className={duration === "custom" ? "selected" : ""}><input type="radio" name="duration" value="custom" checked={duration === "custom"} onChange={() => setDuration("custom")} /><strong>Choose dates</strong><span>Pick exact times</span></label>
+            <div className="resident-duration-options">
+              <label className={duration === "today" ? "selected" : ""}><input type="radio" name="duration" checked={duration === "today"} onChange={() => setDuration("today")} /><strong>Today</strong><span>Until midnight</span></label>
+              <label className={duration === "week" ? "selected" : ""}><input type="radio" name="duration" checked={duration === "week"} onChange={() => setDuration("week")} /><strong>7 days</strong><span>Through {new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(weekEnd)}</span></label>
+              <label className={duration === "custom" ? "selected" : ""}><input type="radio" name="duration" checked={duration === "custom"} onChange={() => setDuration("custom")} /><strong>Choose dates</strong><span>Exact times</span></label>
             </div>
           </fieldset>
 
-          {duration === "custom" && (
-            <div className="custom-dates">
-              <label>Starts<input type="datetime-local" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label>
-              <label>Ends<input type="datetime-local" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label>
-            </div>
-          )}
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <button className="primary-action form-submit" type="submit">Create code</button>
-          <p className="demo-note">This code is created in UniFi and can be found here again later.</p>
+          {duration === "custom" ? <div className="resident-custom-dates"><label>Starts<input type="datetime-local" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label>Ends<input type="datetime-local" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div> : null}
+          {error ? <p className="resident-form-error" role="alert">{error}</p> : null}
+          <button className="resident-primary-button resident-form-submit" type="submit">Create guest code</button>
+          <p className="resident-form-note">The code will be created at the gate and saved here for your household.</p>
         </form>
       </main>
     );
   }
 
-  if (view === "success" && createdCode) {
+  if (screen === "success" && createdCode) {
     return (
-      <main className="app-shell success-shell">
-        <div className="success-mark" aria-hidden="true">✓</div>
-        <p className="eyebrow">Ready to use</p>
-        <h1>{createdCode.label}&apos;s code is ready.</h1>
-        <p className="success-subtitle">{codeTiming(createdCode, getState(createdCode))}</p>
-        <div className="success-code"><p className="pin" aria-label={`Gate code ${createdCode.pin.split("").join(" ")}`}>{spacedPin(createdCode.pin)}</p></div>
-        <div className="success-actions">
-          <button className="primary-action" type="button" onClick={() => shareCode(createdCode)}>Share code</button>
-          <button className="secondary-action" type="button" onClick={() => copyCode(createdCode)}>{copiedId === createdCode.id ? "Code copied!" : "Copy code"}</button>
-        </div>
-        <p className="reassurance">You can always find this code on the home screen.</p>
-        <button className="text-button done-button" type="button" onClick={() => setView("home")}>Done</button>
+      <main className="resident-shell resident-success-shell">
+        <div className="resident-success-mark"><Check aria-hidden="true" /></div>
+        <p className="resident-kicker">Ready to use</p>
+        <h1>{createdCode.label}&apos;s code is ready</h1>
+        <p>{codeTiming(createdCode, getState(createdCode))}</p>
+        <div className="resident-success-pin" aria-label={`Gate code ${createdCode.pin.split("").join(" ")}`}>{spacedPin(createdCode.pin)}</div>
+        <div className="resident-success-actions"><button className="resident-primary-button" type="button" onClick={() => shareCode(createdCode)}><Share2 aria-hidden="true" />Share code</button><button className="resident-secondary-button" type="button" onClick={() => copyCode(createdCode)}><Copy aria-hidden="true" />{copiedId === createdCode.id ? "Copied" : "Copy code"}</button></div>
+        <p className="resident-success-note">You can always find this code in Codes.</p>
+        <button className="resident-text-button" type="button" onClick={() => setScreen("codes")}>Done</button>
       </main>
     );
   }
 
+  const gateLabel = effectiveGateState === "held" ? "Gate is held open" : effectiveGateState === "opening" ? "Gate is opening" : effectiveGateState === "open" ? "Gate is open" : "Gate is closed";
+
   return (
-    <main className="app-shell">
-      <header className="topbar"><div className="home-brand"><Image className="home-logo" src="/gatey-logo.png" alt="Gatey" width={1536} height={1024} priority /><div><p className="eyebrow">Home</p><h1>{householdName}</h1></div></div><div className="account-actions">{isSystemAdmin && <a className="admin-link" href="/admin">Admin</a>}<button className="sign-out-link" type="button" onClick={openPasswordDialog}>Password</button><button className="sign-out-link" type="button" onClick={signOut}>Sign out</button></div></header>
-      <section className="welcome" aria-labelledby="welcome-title"><p className="eyebrow">{today}</p><h2 id="welcome-title">{greeting}, {firstName}.</h2><p>Who are we welcoming today?</p><button className="primary-action" type="button" onClick={openCreate}><span aria-hidden="true">＋</span>Create guest code</button></section>
+    <main className="resident-shell">
+      <header className="resident-topbar">
+        <div className="resident-brand"><Image src="/gatey-icon-192.png" alt="" width={48} height={48} priority /><div><p>Gatey</p><h1>{householdName}</h1></div></div>
+        <span className="resident-preview-chip">Design preview</span>
+      </header>
 
-      {!ready ? <p className="loading">Finding your codes…</p> : (
-        <>
-          <section className="code-section" aria-labelledby="active-heading">
-            <div className="section-heading"><h2 id="active-heading">Active codes</h2><span className="count">{grouped.active.length}</span></div>
-            {grouped.active.length ? grouped.active.map((code) => <CodeCard key={code.id} code={code} copied={copiedId === code.id} onCopy={copyCode} onShare={shareCode} onCancel={setCancelTarget} />) : <div className="empty-state"><p>No active codes</p><span>Create one when someone&apos;s on the way.</span></div>}
-          </section>
+      <aside className="resident-preview-banner"><strong>Safe preview</strong><span>{camerasConfigured ? "Camera snapshots and temporary guest codes are connected. Gate, permanent-code, and party controls are simulated." : "Temporary guest codes are connected. Camera setup, gate, permanent-code, and party controls are simulated."}</span></aside>
 
-          {grouped.upcoming.length > 0 && <section className="code-section upcoming-section" aria-labelledby="upcoming-heading"><div className="section-heading"><h2 id="upcoming-heading">Upcoming</h2><span className="count">{grouped.upcoming.length}</span></div>{grouped.upcoming.map((code) => <CodeCard key={code.id} code={code} copied={copiedId === code.id} onCopy={copyCode} onShare={shareCode} onCancel={setCancelTarget} />)}</section>}
+      {previewNotice ? <div className="resident-toast" role="status"><Check aria-hidden="true" /><span>{previewNotice}</span><button type="button" onClick={() => setPreviewNotice("")} aria-label="Dismiss"><X aria-hidden="true" /></button></div> : null}
 
-          {grouped.past.length > 0 && <section className="past-section"><button className="past-codes" type="button" onClick={() => setPastOpen((open) => !open)} aria-expanded={pastOpen}><span>Past codes <small>{grouped.past.length}</small></span><span aria-hidden="true">{pastOpen ? "⌃" : "⌄"}</span></button>{pastOpen && <div className="past-list">{grouped.past.map((code) => <CodeCard key={code.id} code={code} copied={copiedId === code.id} onCopy={copyCode} onShare={shareCode} />)}</div>}</section>}
-        </>
-      )}
+      {screen === "gate" ? <>
+        <section className="resident-section resident-camera-section" aria-label="Gate camera snapshots">
+          <div className="resident-camera-grid">
+            <button className="resident-camera" type="button" onClick={() => setExpandedCamera("person")} aria-label="Enlarge person camera snapshot"><CameraSnapshot camera="person" label="Person" revision={cameraRevision} configured={camerasConfigured} /><span><Camera aria-hidden="true" />Person</span></button>
+            <button className="resident-camera" type="button" onClick={() => setExpandedCamera("road")} aria-label="Enlarge road camera snapshot"><CameraSnapshot camera="road" label="Road" revision={cameraRevision} configured={camerasConfigured} /><span><Camera aria-hidden="true" />Road</span></button>
+          </div>
+          <div className="resident-camera-meta"><p className="resident-camera-time">Refreshed {formatTime(cameraUpdatedAt)}</p><button className="resident-refresh-button" type="button" onClick={refreshCameras} disabled={cameraRefreshing}><RefreshCw className={cameraRefreshing ? "spinning" : ""} aria-hidden="true" />{cameraRefreshing ? "Refreshing" : "Refresh"}</button></div>
+        </section>
 
-      {cancelTarget && <div className="dialog-backdrop" role="presentation"><div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-title"><p className="eyebrow">Please confirm</p><h2 id="cancel-title">Cancel {cancelTarget.label}&apos;s code?</h2><p>The code <strong>{spacedPin(cancelTarget.pin)}</strong> will stop working right away.</p><div className="dialog-actions"><button className="danger-button" type="button" onClick={confirmCancel}>Yes, cancel code</button><button className="secondary-action" type="button" onClick={() => setCancelTarget(null)}>Keep it active</button></div></div></div>}
-      {passwordDialogOpen && <div className="dialog-backdrop" role="presentation"><section className="dialog password-dialog" role="dialog" aria-modal="true" aria-labelledby="password-title"><p className="eyebrow">Account security</p><h2 id="password-title">Change password</h2><p>Choose a new password with at least 8 characters. We&apos;ll sign out your other devices.</p><form className="password-form" onSubmit={changePassword}><label htmlFor="current-password">Current password<input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required autoFocus /></label><label htmlFor="new-password">New password<input id="new-password" type="password" autoComplete="new-password" minLength={8} maxLength={128} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /></label><label htmlFor="confirm-password">Confirm new password<input id="confirm-password" type="password" autoComplete="new-password" minLength={8} maxLength={128} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} required /></label>{passwordError && <p className="form-error" role="alert">{passwordError}</p>}{passwordSuccess && <p className="form-success" role="status">{passwordSuccess}</p>}<div className="dialog-actions"><button className="primary-action" type="submit" disabled={passwordPending}>{passwordPending ? "Changing password…" : "Change password"}</button><button className="secondary-action" type="button" onClick={closePasswordDialog} disabled={passwordPending}>{passwordSuccess ? "Done" : "Cancel"}</button></div></form></section></div>}
+        <section className={`resident-gate-control resident-gate-${effectiveGateState}`} aria-labelledby="gate-state">
+          <p className="resident-gate-state" id="gate-state"><span aria-hidden="true" />{gateLabel}</p>
+          <button type="button" className="resident-open-button" onClick={openGate} disabled={effectiveGateState !== "closed"}>
+            {effectiveGateState === "closed" ? <LockKeyhole aria-hidden="true" /> : <DoorOpen aria-hidden="true" />}
+            <span>{effectiveGateState === "closed" ? "Open gate" : effectiveGateState === "opening" ? "Opening…" : effectiveGateState === "held" ? "Party mode is on" : "Gate is open"}</span>
+          </button>
+        </section>
+
+        <section className={`resident-party-card resident-party-${currentPartyPhase}`} aria-labelledby="party-title">
+          <div className="resident-feature-icon"><PartyPopper aria-hidden="true" /></div>
+          <div className="resident-feature-copy">
+            <h2 id="party-title">Party mode</h2>
+            {currentPartyPhase === "active" && party ? <><p>Closes automatically at {formatTime(party.endsAt)}</p><strong className="resident-countdown">{countdown(party.endsAt, now)}</strong></> : currentPartyPhase === "scheduled" && party ? <p>Opens at {formatTime(party.startsAt)} and closes at {formatTime(party.endsAt)}.</p> : null}
+          </div>
+          {currentPartyPhase === "off" ? <button className="resident-row-action" type="button" onClick={openPartyDialog}>Enable<ChevronRight aria-hidden="true" /></button> : <button className="resident-row-action resident-danger-action" type="button" onClick={endParty}>{currentPartyPhase === "active" ? "End now" : "Cancel"}</button>}
+        </section>
+
+        <button className="resident-code-summary" type="button" onClick={() => setScreen("codes")}>
+          <span className="resident-feature-icon"><KeyRound aria-hidden="true" /></span>
+          <span><small>Your code</small><strong>{householdName} gate code</strong><b>{householdCode ? spacedPin(householdCode.pin) : "Not set"}</b></span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+      </> : null}
+
+      {screen === "codes" ? <section className="resident-page" aria-labelledby="codes-title">
+        <div className="resident-page-heading"><p className="resident-kicker">Household access</p><h1 id="codes-title">Codes</h1><p>Everything your household uses to enter the gate.</p></div>
+
+        <section className="resident-house-code" aria-labelledby="house-code-title">
+          <div className="resident-section-title"><div><p className="resident-kicker">Shared by your household</p><h2 id="house-code-title">{householdName} gate code</h2></div><House aria-hidden="true" /></div>
+          <p className="resident-large-pin" aria-label={householdCode ? `Gate code ${householdCode.pin.split("").join(" ")}` : "No household gate code"}>{householdCode ? spacedPin(householdCode.pin) : "Not set"}</p>
+          <button className="resident-secondary-button" type="button" onClick={openHouseCodeDialog}>{householdCode ? "Change gate code" : "Set gate code"}</button>
+        </section>
+
+        <section className="resident-code-section" aria-labelledby="permanent-title">
+          <div className="resident-section-title"><div><p className="resident-kicker">Always works</p><h2 id="permanent-title">Permanent access</h2></div><button className="resident-add-button" type="button" onClick={openPersonCodeDialog}><Plus aria-hidden="true" />Add someone</button></div>
+          {personalCodes.length ? <div className="resident-permanent-list">{personalCodes.map((code) => <article key={code.id}><span className="resident-person-mark">{code.label.slice(0, 1).toUpperCase()}</span><div><h3>{code.label}</h3><p>Permanent gate code</p></div><strong>{spacedPin(code.pin)}</strong></article>)}</div> : <div className="resident-empty-compact"><UsersRound aria-hidden="true" /><span>No one has a separate permanent code.</span></div>}
+        </section>
+
+        <section className="resident-code-section" aria-labelledby="guest-title">
+          <div className="resident-section-title"><div><p className="resident-kicker">Ends automatically</p><h2 id="guest-title">Guest codes</h2></div><button className="resident-add-button" type="button" onClick={openCreate}><Plus aria-hidden="true" />Create code</button></div>
+          {!ready ? <p className="resident-loading">Finding your guest codes…</p> : <>
+            {grouped.active.length || grouped.upcoming.length ? <div className="resident-guest-list">{[...grouped.active, ...grouped.upcoming].map((code) => <GuestCodeCard key={code.id} code={code} copied={copiedId === code.id} onCopy={copyCode} onShare={shareCode} onCancel={setCancelTarget} />)}</div> : <div className="resident-empty-compact"><Clock3 aria-hidden="true" /><span>No active guest codes.</span></div>}
+            {grouped.past.length ? <><button className="resident-past-toggle" type="button" onClick={() => setPastOpen((open) => !open)} aria-expanded={pastOpen}><span>Past codes ({grouped.past.length})</span><ChevronDown className={pastOpen ? "rotated" : ""} aria-hidden="true" /></button>{pastOpen ? <div className="resident-guest-list resident-past-list">{grouped.past.map((code) => <GuestCodeCard key={code.id} code={code} copied={copiedId === code.id} onCopy={copyCode} onShare={shareCode} />)}</div> : null}</> : null}
+          </>}
+          {error ? <p className="resident-form-error" role="alert">{error}</p> : null}
+        </section>
+      </section> : null}
+
+      {screen === "more" ? <section className="resident-page" aria-labelledby="more-title">
+        <div className="resident-page-heading"><p className="resident-kicker">Gatey</p><h1 id="more-title">More</h1><p>Phone setup and account settings.</p></div>
+        <section className="resident-install-card"><div className="resident-feature-icon"><Plus aria-hidden="true" /></div><div><p className="resident-kicker">Faster next time</p><h2>Add Gatey to your home screen</h2><p>On iPhone, tap Share, then “Add to Home Screen.” On Android, open the browser menu and tap “Add to Home screen.”</p></div></section>
+        <section className="resident-settings-list">
+          <div className="resident-settings-person"><span>{userName.slice(0, 1).toUpperCase()}</span><div><strong>{userName}</strong><small>{householdName}</small></div></div>
+          <button type="button" onClick={openPasswordDialog}><KeyRound aria-hidden="true" /><span>Change password</span><ChevronRight aria-hidden="true" /></button>
+          {isSystemAdmin ? <Link href="/admin"><Settings aria-hidden="true" /><span>Administration</span><ChevronRight aria-hidden="true" /></Link> : null}
+          <button type="button" onClick={signOut}><LogOut aria-hidden="true" /><span>Sign out</span><ChevronRight aria-hidden="true" /></button>
+        </section>
+      </section> : null}
+
+      <nav className="resident-bottom-nav" aria-label="Main navigation">
+        <button className={screen === "gate" ? "active" : ""} type="button" onClick={() => setScreen("gate")}><DoorOpen aria-hidden="true" /><span>Gate</span></button>
+        <button className={screen === "codes" ? "active" : ""} type="button" onClick={() => setScreen("codes")}><KeyRound aria-hidden="true" /><span>Codes</span></button>
+        <button className={screen === "more" ? "active" : ""} type="button" onClick={() => setScreen("more")}><Settings aria-hidden="true" /><span>More</span></button>
+      </nav>
+
+      {expandedCamera ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog resident-camera-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Camera snapshot</p><h2 id="camera-dialog-title">{expandedCamera === "person" ? "Person at the call box" : "Road-facing camera"}</h2></div><button type="button" onClick={() => setExpandedCamera(null)} aria-label="Close"><X aria-hidden="true" /></button></div><div className={`resident-camera-large resident-camera-${expandedCamera}`}><CameraSnapshot camera={expandedCamera} label={expandedCamera === "person" ? "Person" : "Road"} revision={cameraRevision} configured={camerasConfigured} /></div><div className="resident-camera-dialog-footer"><span>Refreshed {formatTime(cameraUpdatedAt)}</span><button className="resident-secondary-button" type="button" onClick={refreshCameras}><RefreshCw className={cameraRefreshing ? "spinning" : ""} aria-hidden="true" />Refresh</button></div></section></div> : null}
+
+      {partyDialogOpen ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="party-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Today only</p><h2 id="party-dialog-title">Set up party mode</h2></div><button type="button" onClick={() => setPartyDialogOpen(false)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">The gate will stay open so guests can drive in freely.</p><form onSubmit={saveParty}><fieldset className="resident-choice-fieldset"><legend>Starts</legend><label className={partyStartChoice === "now" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "now"} onChange={() => setPartyStartChoice("now")} /><strong>Now</strong><span>Open the gate right away</span></label><label className={partyStartChoice === "later" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "later"} onChange={() => setPartyStartChoice("later")} /><strong>Later today</strong><span>Choose a starting time</span></label></fieldset>{partyStartChoice === "later" ? <label className="resident-time-field">Gate opens<input type="time" value={partyStartTime} onChange={(event) => setPartyStartTime(event.target.value)} required /></label> : null}<label className="resident-time-field">Gate closes<input type="time" value={partyEndTime} onChange={(event) => setPartyEndTime(event.target.value)} required /></label>{partyError ? <p className="resident-form-error" role="alert">{partyError}</p> : null}<button className="resident-primary-button" type="submit">{partyStartChoice === "now" ? "Start party mode" : "Schedule party mode"}</button></form></section></div> : null}
+
+      {codeDialog ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="code-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Design preview</p><h2 id="code-dialog-title">{codeDialog === "household" ? `Change ${householdName} gate code` : "Add permanent access"}</h2></div><button type="button" onClick={() => setCodeDialog(null)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">{codeDialog === "household" ? "Everyone in your household will use this at the keypad." : "Use this for a trusted person who should always be able to enter."}</p><form onSubmit={savePermanentCode}>{codeDialog === "person" ? <label className="resident-field-label" htmlFor="permanent-name">Person&apos;s name<input id="permanent-name" className="resident-input" value={codeName} onChange={(event) => setCodeName(event.target.value)} placeholder="For example, Sarah" autoFocus /></label> : null}<label className="resident-field-label" htmlFor="permanent-pin">Choose a gate code <span>4–6 numbers</span><input id="permanent-pin" className="resident-input resident-pin-input" value={codePin} onChange={(event) => setCodePin(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="off" placeholder="4826" autoFocus={codeDialog === "household"} /></label>{codeError ? <p className="resident-form-error" role="alert">{codeError}</p> : null}<button className="resident-primary-button" type="submit">{codeDialog === "household" ? "Save gate code" : "Add permanent code"}</button><p className="resident-form-note">This preview does not send permanent-code changes to UniFi yet.</p></form></section></div> : null}
+
+      {cancelTarget ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-title"><p className="resident-kicker">Please confirm</p><h2 id="cancel-title">Cancel {cancelTarget.label}&apos;s code?</h2><p className="resident-dialog-intro">The code <strong>{spacedPin(cancelTarget.pin)}</strong> will stop working right away.</p><div className="resident-dialog-actions"><button className="resident-danger-button" type="button" onClick={confirmCancel}>Yes, cancel code</button><button className="resident-secondary-button" type="button" onClick={() => setCancelTarget(null)}>Keep it active</button></div></section></div> : null}
+
+      {passwordDialogOpen ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="password-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Account security</p><h2 id="password-title">Change password</h2></div><button type="button" onClick={() => !passwordPending && setPasswordDialogOpen(false)} aria-label="Close"><X aria-hidden="true" /></button></div><form className="resident-password-form" onSubmit={changePassword}><label>Current password<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required autoFocus /></label><label>New password<input type="password" autoComplete="new-password" minLength={8} maxLength={128} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /></label><label>Confirm new password<input type="password" autoComplete="new-password" minLength={8} maxLength={128} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} required /></label>{passwordError ? <p className="resident-form-error" role="alert">{passwordError}</p> : null}{passwordSuccess ? <p className="resident-form-success" role="status">{passwordSuccess}</p> : null}<button className="resident-primary-button" type="submit" disabled={passwordPending}>{passwordPending ? "Changing password…" : "Change password"}</button></form></section></div> : null}
     </main>
   );
 }

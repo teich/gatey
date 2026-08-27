@@ -13,6 +13,12 @@ type CredentialRow = {
   revoked_at: string | null;
 };
 
+export type HouseholdPermanentCode = {
+  id: string;
+  label: string;
+  pin: string;
+};
+
 function mapCredential(row: CredentialRow): Credential {
   const now = Date.now();
   const computedState: CredentialState = row.revoked_at
@@ -41,6 +47,16 @@ export function listCredentials(householdId: string): Credential[] {
     ORDER BY starts_at DESC, created_at DESC
   `).all(householdId) as CredentialRow[];
   return rows.map(mapCredential);
+}
+
+export function listHouseholdPermanentCodes(householdId: string): HouseholdPermanentCode[] {
+  const rows = database.prepare(`
+    SELECT controller_user_id AS id, label, pin
+    FROM person_pins
+    WHERE household_id = ?
+    ORDER BY replaced_at ASC, label COLLATE NOCASE
+  `).all(householdId) as HouseholdPermanentCode[];
+  return rows.map((row) => ({ id: row.id, label: row.label, pin: row.pin }));
 }
 
 export function insertCredential(householdId: string, credential: Credential, controllerVisitorId: string) {
