@@ -112,6 +112,13 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
   const [cancelTarget, setCancelTarget] = useState<GuestCode | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
   const [error, setError] = useState("");
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [passwordPending, setPasswordPending] = useState(false);
 
   useEffect(() => {
     fetch("/api/credentials")
@@ -224,6 +231,58 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
     router.refresh();
   }
 
+  function openPasswordDialog() {
+    setCurrentPassword("");
+    setNewPassword("");
+    setPasswordConfirmation("");
+    setPasswordError("");
+    setPasswordSuccess("");
+    setPasswordDialogOpen(true);
+  }
+
+  function closePasswordDialog() {
+    if (passwordPending) return;
+    setPasswordDialogOpen(false);
+  }
+
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (newPassword.length < 8) {
+      setPasswordError("Your new password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== passwordConfirmation) {
+      setPasswordError("Your new password and confirmation do not match.");
+      return;
+    }
+
+    setPasswordPending(true);
+    try {
+      const result = await authClient.changePassword({
+        currentPassword,
+        newPassword,
+        revokeOtherSessions: true,
+      });
+
+      if (result.error) {
+        setPasswordError(result.error.message || "Could not change your password.");
+        return;
+      }
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setPasswordConfirmation("");
+      setPasswordSuccess("Password changed. You have been signed out of your other devices.");
+    } catch {
+      setPasswordError("Could not change your password. Check your connection and try again.");
+    } finally {
+      setPasswordPending(false);
+    }
+  }
+
   if (view === "create") {
     return (
       <main className="app-shell flow-shell">
@@ -276,7 +335,7 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
 
   return (
     <main className="app-shell">
-      <header className="topbar"><div className="home-brand"><Image className="home-logo" src="/gatey-logo.png" alt="Gatey" width={1536} height={1024} priority /><div><p className="eyebrow">Home</p><h1>{householdName}</h1></div></div><div className="account-actions">{isSystemAdmin && <a className="admin-link" href="/admin">Admin</a>}<button className="sign-out-link" type="button" onClick={signOut}>Sign out</button></div></header>
+      <header className="topbar"><div className="home-brand"><Image className="home-logo" src="/gatey-logo.png" alt="Gatey" width={1536} height={1024} priority /><div><p className="eyebrow">Home</p><h1>{householdName}</h1></div></div><div className="account-actions">{isSystemAdmin && <a className="admin-link" href="/admin">Admin</a>}<button className="sign-out-link" type="button" onClick={openPasswordDialog}>Password</button><button className="sign-out-link" type="button" onClick={signOut}>Sign out</button></div></header>
       <section className="welcome" aria-labelledby="welcome-title"><p className="eyebrow">{today}</p><h2 id="welcome-title">{greeting}, {firstName}.</h2><p>Who are we welcoming today?</p><button className="primary-action" type="button" onClick={openCreate}><span aria-hidden="true">＋</span>Create guest code</button></section>
 
       {!ready ? <p className="loading">Finding your codes…</p> : (
@@ -293,6 +352,7 @@ export function ResidentHome({ householdName, userName, isSystemAdmin }: { house
       )}
 
       {cancelTarget && <div className="dialog-backdrop" role="presentation"><div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-title"><p className="eyebrow">Please confirm</p><h2 id="cancel-title">Cancel {cancelTarget.label}&apos;s code?</h2><p>The code <strong>{spacedPin(cancelTarget.pin)}</strong> will stop working right away.</p><div className="dialog-actions"><button className="danger-button" type="button" onClick={confirmCancel}>Yes, cancel code</button><button className="secondary-action" type="button" onClick={() => setCancelTarget(null)}>Keep it active</button></div></div></div>}
+      {passwordDialogOpen && <div className="dialog-backdrop" role="presentation"><section className="dialog password-dialog" role="dialog" aria-modal="true" aria-labelledby="password-title"><p className="eyebrow">Account security</p><h2 id="password-title">Change password</h2><p>Choose a new password with at least 8 characters. We&apos;ll sign out your other devices.</p><form className="password-form" onSubmit={changePassword}><label htmlFor="current-password">Current password<input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required autoFocus /></label><label htmlFor="new-password">New password<input id="new-password" type="password" autoComplete="new-password" minLength={8} maxLength={128} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /></label><label htmlFor="confirm-password">Confirm new password<input id="confirm-password" type="password" autoComplete="new-password" minLength={8} maxLength={128} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} required /></label>{passwordError && <p className="form-error" role="alert">{passwordError}</p>}{passwordSuccess && <p className="form-success" role="status">{passwordSuccess}</p>}<div className="dialog-actions"><button className="primary-action" type="submit" disabled={passwordPending}>{passwordPending ? "Changing password…" : "Change password"}</button><button className="secondary-action" type="button" onClick={closePasswordDialog} disabled={passwordPending}>{passwordSuccess ? "Done" : "Cancel"}</button></div></form></section></div>}
     </main>
   );
 }

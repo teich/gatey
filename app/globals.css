@@ -153,6 +153,12 @@ button { -webkit-tap-highlight-color: transparent; }
 .dialog > p:not(.eyebrow) { color: var(--gatey-muted); font-size: 16px; line-height: 1.5; }
 .dialog > p strong { color: var(--ink); font-family: ui-monospace, monospace; letter-spacing: .05em; }
 .dialog-actions { display: grid; gap: 9px; margin-top: 25px; }
+.password-dialog { max-height: calc(100vh - 40px); overflow-y: auto; }
+.password-form { display: grid; gap: 14px; margin-top: 22px; }
+.password-form label { display: grid; gap: 6px; font-size: 14px; font-weight: 750; }
+.password-form input { width: 100%; min-height: 48px; padding: 0 13px; border: 1px solid #c9c8c0; border-radius: 11px; background: white; color: var(--ink); font-size: 16px; outline: none; }
+.password-form input:focus { border-color: var(--forest); box-shadow: 0 0 0 3px rgba(31, 81, 61, .13); }
+.form-success { margin: 0; padding: 12px; border-radius: 10px; background: #e4f0e5; color: #245538; font-weight: 700; }
 
 .admin-shell { width: min(100%, 920px); min-height: 100vh; margin: 0 auto; padding: 34px 20px 64px; }
 .admin-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
