@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HouseIcon, LayoutDashboardIcon, TicketIcon, UsersIcon } from "lucide-react";
+import { HouseIcon, LayoutDashboardIcon, ScrollTextIcon, TicketIcon, UsersIcon } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -23,6 +23,7 @@ const navigation = [
   { title: "Households", href: "/admin/households", icon: HouseIcon },
   { title: "People", href: "/admin/people", icon: UsersIcon },
   { title: "Visitors", href: "/admin/visitors", icon: TicketIcon },
+  { title: "Activity log", href: "/admin/activity", icon: ScrollTextIcon },
 ];
 
 export function AppSidebar({ userName, ...props }: React.ComponentProps<typeof Sidebar> & { userName: string }) {

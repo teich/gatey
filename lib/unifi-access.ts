@@ -194,6 +194,29 @@ export async function unlockGate(actor: { id: string; name: string }): Promise<G
   return cacheGateStatus(gateStatus(await gateDoor()));
 }
 
+export async function holdGateOpenUntil(endsAt: Date) {
+  const minutes = Math.ceil((endsAt.getTime() - Date.now()) / 60_000);
+  if (minutes < 1) throw new Error("Choose a party end time at least one minute from now.");
+
+  const door = await gateDoor();
+  await request<"success">(`/doors/${encodeURIComponent(door.id)}/lock_rule`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "custom", interval: minutes }),
+  });
+  globalForGateStatus.gateyGateStatus = undefined;
+}
+
+export async function endGateHoldOpen() {
+  const door = await gateDoor();
+  await request<"success">(`/doors/${encodeURIComponent(door.id)}/lock_rule`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "lock_now" }),
+  });
+  globalForGateStatus.gateyGateStatus = undefined;
+}
+
 function allDaySchedule() {
   return Object.fromEntries(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].map((day) => [day, [{ start_time: "00:00:00", end_time: "23:59:59" }]]));
 }

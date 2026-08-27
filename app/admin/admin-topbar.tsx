@@ -18,6 +18,7 @@ const titles: Record<string, string> = {
   "/admin/households": "Households",
   "/admin/people": "People",
   "/admin/visitors": "Visitors",
+  "/admin/activity": "Activity log",
 };
 
 export function AdminTopbar() {

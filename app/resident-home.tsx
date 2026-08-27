@@ -49,9 +49,12 @@ type PermanentCode = {
   kind: "household" | "person";
 };
 
-type PartyWindow = {
+type PartyMode = {
+  state: "scheduled" | "active";
   startsAt: string;
   endsAt: string;
+  householdId: string;
+  householdName: string;
 };
 
 function endOfDay(date: Date) {
@@ -121,10 +124,8 @@ function defaultPartyEnd() {
   return result > endOfDay(new Date()) ? endOfDay(new Date()) : result;
 }
 
-function partyPhase(party: PartyWindow | null, now: number) {
-  if (!party || new Date(party.endsAt).getTime() <= now) return "off" as const;
-  if (new Date(party.startsAt).getTime() > now) return "scheduled" as const;
-  return "active" as const;
+function partyPhase(party: PartyMode | null) {
+  return party?.state || "off";
 }
 
 function countdown(until: string, now: number) {
@@ -230,7 +231,10 @@ export function ResidentHome({
   const [cameraRefreshing, setCameraRefreshing] = useState(false);
   const [cameraRevision, setCameraRevision] = useState(0);
   const [expandedCamera, setExpandedCamera] = useState<CameraView | null>(null);
-  const [party, setParty] = useState<PartyWindow | null>(null);
+  const [party, setParty] = useState<PartyMode | null>(null);
+  const [partyCanEnd, setPartyCanEnd] = useState(false);
+  const [partyPending, setPartyPending] = useState(false);
+  const [partyLoadError, setPartyLoadError] = useState("");
   const [partyDialogOpen, setPartyDialogOpen] = useState(false);
   const [partyStartChoice, setPartyStartChoice] = useState<"now" | "later">("now");
   const [partyStartTime, setPartyStartTime] = useState(() => toTimeInputValue(new Date(Date.now() + 30 * 60_000)));
@@ -295,6 +299,28 @@ export function ResidentHome({
     };
   }, [refreshGate]);
 
+  const refreshParty = useCallback(async () => {
+    const response = await fetch("/api/party-mode", { cache: "no-store" });
+    const payload = await response.json() as { party?: PartyMode | null; canEnd?: boolean; error?: string };
+    if (!response.ok) throw new Error(payload.error || "Party mode is unavailable.");
+    setParty(payload.party || null);
+    setPartyCanEnd(Boolean(payload.canEnd));
+    setPartyLoadError("");
+  }, []);
+
+  useEffect(() => {
+    const initialFetch = window.setTimeout(() => {
+      void refreshParty().catch((caught) => setPartyLoadError(caught instanceof Error ? caught.message : "Party mode is unavailable."));
+    }, 0);
+    const timer = window.setInterval(() => {
+      void refreshParty().catch((caught) => setPartyLoadError(caught instanceof Error ? caught.message : "Party mode is unavailable."));
+    }, 15_000);
+    return () => {
+      window.clearTimeout(initialFetch);
+      window.clearInterval(timer);
+    };
+  }, [refreshParty]);
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
@@ -315,7 +341,7 @@ export function ResidentHome({
 
   const householdCode = permanentCodes.find((code) => code.kind === "household");
   const personalCodes = permanentCodes.filter((code) => code.kind === "person");
-  const currentPartyPhase = partyPhase(party, now);
+  const currentPartyPhase = partyPhase(party);
 
   function refreshCameras() {
     if (cameraRefreshing) return;
@@ -353,7 +379,7 @@ export function ResidentHome({
     setPartyDialogOpen(true);
   }
 
-  function saveParty(event: FormEvent<HTMLFormElement>) {
+  async function saveParty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const startsAt = partyStartChoice === "now" ? new Date() : fromTodayTime(partyStartTime);
     const endsAt = fromTodayTime(partyEndTime);
@@ -365,15 +391,39 @@ export function ResidentHome({
       setPartyError("The closing time must be after the starting time.");
       return;
     }
-    setParty({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
-    setNow(Date.now());
-    setPartyDialogOpen(false);
-    setPreviewNotice(partyStartChoice === "now" ? "Party mode preview started." : "Party mode preview scheduled.");
+    setPartyPending(true);
+    setPartyError("");
+    try {
+      const response = await fetch("/api/party-mode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }) });
+      const payload = await response.json() as { party?: PartyMode | null; canEnd?: boolean; error?: string };
+      if (!response.ok || !payload.party) throw new Error(payload.error || "Party mode could not be enabled. Try again.");
+      setParty(payload.party);
+      setPartyCanEnd(Boolean(payload.canEnd));
+      setNow(Date.now());
+      setPartyDialogOpen(false);
+    } catch (caught) {
+      setPartyError(caught instanceof Error ? caught.message : "Party mode could not be enabled. Try again.");
+    } finally {
+      setPartyPending(false);
+    }
   }
 
-  function endParty() {
-    setParty(null);
-    setPreviewNotice("Party mode preview ended.");
+  async function endParty() {
+    if (partyPending) return;
+    setPartyPending(true);
+    setPartyLoadError("");
+    try {
+      const response = await fetch("/api/party-mode", { method: "DELETE" });
+      const payload = await response.json() as { party?: PartyMode | null; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Party mode could not be ended. Try again.");
+      setParty(null);
+      setPartyCanEnd(false);
+      setNow(Date.now());
+    } catch (caught) {
+      setPartyLoadError(caught instanceof Error ? caught.message : "Party mode could not be ended. Try again.");
+    } finally {
+      setPartyPending(false);
+    }
   }
 
   function openCreate() {
@@ -610,7 +660,7 @@ export function ResidentHome({
         <span className="resident-preview-chip">Design preview</span>
       </header>
 
-      <aside className="resident-preview-banner"><strong>Safe preview</strong><span>{camerasConfigured ? "Camera snapshots, gate control, and temporary guest codes are connected. Permanent-code and party controls are simulated." : "Gate control and temporary guest codes are connected. Camera setup, permanent-code, and party controls are simulated."}</span></aside>
+      <aside className="resident-preview-banner"><strong>Safe preview</strong><span>{camerasConfigured ? "Camera snapshots, gate control, party mode, and temporary guest codes are connected. Permanent-code controls are simulated." : "Gate control, party mode, and temporary guest codes are connected. Camera setup and permanent-code controls are simulated."}</span></aside>
 
       {previewNotice ? <div className="resident-toast" role="status"><Check aria-hidden="true" /><span>{previewNotice}</span><button type="button" onClick={() => setPreviewNotice("")} aria-label="Dismiss"><X aria-hidden="true" /></button></div> : null}
 
@@ -636,9 +686,9 @@ export function ResidentHome({
           <div className="resident-feature-icon"><PartyPopper aria-hidden="true" /></div>
           <div className="resident-feature-copy">
             <h2 id="party-title">Party mode</h2>
-            {currentPartyPhase === "active" && party ? <><p>Closes automatically at {formatTime(party.endsAt)}</p><strong className="resident-countdown">{countdown(party.endsAt, now)}</strong></> : currentPartyPhase === "scheduled" && party ? <p>Opens at {formatTime(party.startsAt)} and closes at {formatTime(party.endsAt)}.</p> : null}
+            {currentPartyPhase === "active" && party ? <><p>{party.householdName === householdName ? `Ends at ${formatTime(party.endsAt)}` : `${party.householdName} has the gate open until ${formatTime(party.endsAt)}`}</p><strong className="resident-countdown">{countdown(party.endsAt, now)}</strong></> : currentPartyPhase === "scheduled" && party ? <p>{party.householdName === householdName ? `Opens at ${formatTime(party.startsAt)} and ends at ${formatTime(party.endsAt)}.` : `${party.householdName} scheduled this until ${formatTime(party.endsAt)}.`}</p> : partyLoadError ? <p>{partyLoadError}</p> : null}
           </div>
-          {currentPartyPhase === "off" ? <button className="resident-row-action" type="button" onClick={openPartyDialog}>Enable<ChevronRight aria-hidden="true" /></button> : <button className="resident-row-action resident-danger-action" type="button" onClick={endParty}>{currentPartyPhase === "active" ? "End now" : "Cancel"}</button>}
+          {currentPartyPhase === "off" ? <button className="resident-row-action" type="button" onClick={openPartyDialog}>Enable<ChevronRight aria-hidden="true" /></button> : partyCanEnd ? <button className="resident-row-action resident-danger-action" type="button" disabled={partyPending} onClick={() => void endParty()}>{partyPending ? "Working…" : currentPartyPhase === "active" ? "End now" : "Cancel"}</button> : <span className="resident-party-in-use">In use</span>}
         </section>
 
         <button className="resident-code-summary" type="button" onClick={() => setScreen("codes")}>
@@ -691,7 +741,7 @@ export function ResidentHome({
 
       {expandedCamera ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog resident-camera-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Camera snapshot</p><h2 id="camera-dialog-title">{expandedCamera === "person" ? "Person at the call box" : "Road-facing camera"}</h2></div><button type="button" onClick={() => setExpandedCamera(null)} aria-label="Close"><X aria-hidden="true" /></button></div><div className={`resident-camera-large resident-camera-${expandedCamera}`}><CameraSnapshot camera={expandedCamera} label={expandedCamera === "person" ? "Person" : "Road"} revision={cameraRevision} configured={camerasConfigured} /></div><div className="resident-camera-dialog-footer"><span>Refreshed {formatTime(cameraUpdatedAt)}</span><button className="resident-secondary-button" type="button" onClick={refreshCameras}><RefreshCw className={cameraRefreshing ? "spinning" : ""} aria-hidden="true" />Refresh</button></div></section></div> : null}
 
-      {partyDialogOpen ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="party-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Today only</p><h2 id="party-dialog-title">Set up party mode</h2></div><button type="button" onClick={() => setPartyDialogOpen(false)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">The gate will stay open so guests can drive in freely.</p><form onSubmit={saveParty}><fieldset className="resident-choice-fieldset"><legend>Starts</legend><label className={partyStartChoice === "now" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "now"} onChange={() => setPartyStartChoice("now")} /><strong>Now</strong><span>Open the gate right away</span></label><label className={partyStartChoice === "later" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "later"} onChange={() => setPartyStartChoice("later")} /><strong>Later today</strong><span>Choose a starting time</span></label></fieldset>{partyStartChoice === "later" ? <label className="resident-time-field">Gate opens<input type="time" value={partyStartTime} onChange={(event) => setPartyStartTime(event.target.value)} required /></label> : null}<label className="resident-time-field">Gate closes<input type="time" value={partyEndTime} onChange={(event) => setPartyEndTime(event.target.value)} required /></label>{partyError ? <p className="resident-form-error" role="alert">{partyError}</p> : null}<button className="resident-primary-button" type="submit">{partyStartChoice === "now" ? "Start party mode" : "Schedule party mode"}</button></form></section></div> : null}
+      {partyDialogOpen ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="party-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Today only</p><h2 id="party-dialog-title">Set up party mode</h2></div><button type="button" disabled={partyPending} onClick={() => setPartyDialogOpen(false)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">The gate will stay open so guests can drive in freely.</p><form onSubmit={(event) => void saveParty(event)}><fieldset className="resident-choice-fieldset" disabled={partyPending}><legend>Starts</legend><label className={partyStartChoice === "now" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "now"} onChange={() => setPartyStartChoice("now")} /><strong>Now</strong><span>Open the gate right away</span></label><label className={partyStartChoice === "later" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "later"} onChange={() => setPartyStartChoice("later")} /><strong>Later today</strong><span>Choose a starting time</span></label></fieldset>{partyStartChoice === "later" ? <label className="resident-time-field">Gate opens<input type="time" value={partyStartTime} onChange={(event) => setPartyStartTime(event.target.value)} required disabled={partyPending} /></label> : null}<label className="resident-time-field">Gate closes<input type="time" value={partyEndTime} onChange={(event) => setPartyEndTime(event.target.value)} required disabled={partyPending} /></label>{partyError ? <p className="resident-form-error" role="alert">{partyError}</p> : null}<button className="resident-primary-button" type="submit" disabled={partyPending}>{partyPending ? "Setting up…" : partyStartChoice === "now" ? "Start party mode" : "Schedule party mode"}</button></form></section></div> : null}
 
       {codeDialog ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="code-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Design preview</p><h2 id="code-dialog-title">{codeDialog === "household" ? `Change ${householdName} gate code` : "Add permanent access"}</h2></div><button type="button" onClick={() => setCodeDialog(null)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">{codeDialog === "household" ? "Everyone in your household will use this at the keypad." : "Use this for a trusted person who should always be able to enter."}</p><form onSubmit={savePermanentCode}>{codeDialog === "person" ? <label className="resident-field-label" htmlFor="permanent-name">Person&apos;s name<input id="permanent-name" className="resident-input" value={codeName} onChange={(event) => setCodeName(event.target.value)} placeholder="For example, Sarah" autoFocus /></label> : null}<label className="resident-field-label" htmlFor="permanent-pin">Choose a gate code <span>4–6 numbers</span><input id="permanent-pin" className="resident-input resident-pin-input" value={codePin} onChange={(event) => setCodePin(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="off" placeholder="4826" autoFocus={codeDialog === "household"} /></label>{codeError ? <p className="resident-form-error" role="alert">{codeError}</p> : null}<button className="resident-primary-button" type="submit">{codeDialog === "household" ? "Save gate code" : "Add permanent code"}</button><p className="resident-form-note">This preview does not send permanent-code changes to UniFi yet.</p></form></section></div> : null}
 

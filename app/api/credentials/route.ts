@@ -1,6 +1,7 @@
 import { insertCredential, listCredentials } from "@/lib/db";
 import { provisionCredential } from "@/lib/unifi-access";
 import { authorizeHouseholdRequest } from "@/lib/api-authorization";
+import { recordAuditEvent } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,18 @@ export async function POST(request: Request) {
     }
     const { credential, visitorId } = await provisionCredential({ label, startsAt, endsAt });
     insertCredential(authorization.context.household.id, credential, visitorId);
+    try {
+      const { user } = authorization.context.session;
+      recordAuditEvent({
+        actorUserId: user.id,
+        actorName: user.name || "Gatey resident",
+        householdId: authorization.context.household.id,
+        householdName: authorization.context.household.name,
+        action: "guest-code.created",
+        outcome: "succeeded",
+        details: { label: credential.label, startsAt: credential.startsAt, endsAt: credential.endsAt },
+      });
+    } catch { /* The guest code already exists; preserve that result if local logging is unavailable. */ }
     return Response.json({ credential }, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not create the guest code." }, { status: 502 });

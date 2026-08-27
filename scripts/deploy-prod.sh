@@ -53,6 +53,9 @@ repo="/opt/gatey"
 database="/var/lib/gatey/gatey.sqlite"
 backup_dir="/var/lib/gatey/backups"
 service="gatey.service"
+party_timer="gatey-party-scheduler.timer"
+party_service="gatey-party-scheduler.service"
+environment_file="/etc/gatey/gatey.env"
 stage="$repo/.deploy-$expected_commit"
 
 if [[ "$(id -u)" -ne 0 ]]; then
@@ -88,6 +91,12 @@ if [[ ! -f "$stage/.next/BUILD_ID" || ! -x "$stage/node_modules/.bin/next" ]]; t
   exit 1
 fi
 
+if ! grep -q '^GATEY_SCHEDULER_SECRET=' "$environment_file"; then
+  scheduler_secret="$(openssl rand -hex 32)"
+  printf '\nGATEY_SCHEDULER_SECRET=%s\n' "$scheduler_secret" >> "$environment_file"
+  chmod 600 "$environment_file"
+fi
+
 install -d -o "$app_user" -g "$app_user" -m 700 "$backup_dir"
 backup="$backup_dir/gatey-$(date -u +%Y%m%dT%H%M%SZ).sqlite"
 runuser -u "$app_user" -- sqlite3 "$database" ".backup '$backup'"
@@ -103,6 +112,10 @@ fi
 
 previous_commit="$(runuser -u "$app_user" -- git -C "$repo" rev-parse HEAD)"
 runuser -u "$app_user" -- git -C "$repo" merge --ff-only "$expected_commit"
+
+install -m 644 "$repo/systemd/$party_service" "/etc/systemd/system/$party_service"
+install -m 644 "$repo/systemd/$party_timer" "/etc/systemd/system/$party_timer"
+systemctl daemon-reload
 
 next_backup="$repo/.next.before-$previous_commit"
 modules_backup="$repo/node_modules.before-$previous_commit"
@@ -144,6 +157,12 @@ if [[ "$healthy" -ne 1 ]] || ! systemctl is-active --quiet "$service"; then
   journalctl -u "$service" -n 50 --no-pager >&2
   rm -rf "$stage"
   rm -f "$remote_artifact"
+  exit 1
+fi
+
+systemctl enable --now "$party_timer"
+if ! systemctl is-active --quiet "$party_timer"; then
+  echo "The party scheduler timer did not start." >&2
   exit 1
 fi
 

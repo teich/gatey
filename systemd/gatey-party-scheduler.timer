@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Gatey party-mode scheduler every minute
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=1min
+Persistent=true
+Unit=gatey-party-scheduler.service
+
+[Install]
+WantedBy=timers.target

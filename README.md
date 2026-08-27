@@ -17,7 +17,9 @@ Public sign-up is disabled. The initial organization is `oren-home`, preserving 
 
 ## Resident experience preview
 
-The resident home is currently a safe interaction preview for the new gate-first experience. When camera stream settings are present, the two camera views are authenticated, on-demand snapshots. The **Open gate** button and the gate's physical state are connected to UniFi; Gatey shares one controller status read across residents for five seconds and refreshes again after an open request. Permanent-code changes and party mode are still simulated and labeled in the UI. Existing temporary guest-code creation, sharing, listing, and cancellation remain connected to UniFi. The preview includes installable-app metadata so it can be evaluated from a phone home screen before the remaining controls are wired.
+The resident home is currently a safe interaction preview for the new gate-first experience. When camera stream settings are present, the two camera views are authenticated, on-demand snapshots. The **Open gate** button and the gate's physical state are connected to UniFi; Gatey shares one controller status read across residents for five seconds and refreshes again after an open request. Party mode is also connected: one household can schedule it for today, Gatey starts a later party, and UniFi enforces the chosen close time. Permanent-code changes are still simulated and labeled in the UI. Existing temporary guest-code creation, sharing, listing, and cancellation remain connected to UniFi. The preview includes installable-app metadata so it can be evaluated from a phone home screen before the remaining controls are wired.
+
+Every real gate-open request, party-mode change, and guest-code change is recorded in the administrator **Activity log**, including the resident and household at the time of the action and its outcome.
 
 ## Camera snapshots
 
@@ -87,6 +89,7 @@ Then open the local URL printed by Next.js. Use `npm run build` for a production
 - Keep `BETTER_AUTH_SECRET`, the UniFi token, and the SQLite file outside version control.
 - Set `GATEY_DB_PATH` to an absolute persistent path under systemd.
 - Back up the SQLite database independently of the application.
+- Deployments install and enable `gatey-party-scheduler.timer`, which calls a protected local route once a minute so scheduled party mode starts even when nobody has Gatey open. The deployment generates `GATEY_SCHEDULER_SECRET` in `/etc/gatey/gatey.env` on its first run.
 
 Deploy the pushed `main` branch from a trusted development machine with:
 
