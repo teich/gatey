@@ -30,6 +30,6 @@ export async function DELETE(request: Request, context: RouteContext<"/api/crede
     } catch { /* The guest code is already cancelled; preserve that result if local logging is unavailable. */ }
     return Response.json({ ok: true });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not cancel the guest code." }, { status: 502 });
+    return Response.json({ error: error instanceof Error ? error.message : "Could not cancel the guest code." }, { status: 424 });
   }
 }

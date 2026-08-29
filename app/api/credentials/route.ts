@@ -52,6 +52,6 @@ export async function POST(request: Request) {
     } catch { /* The guest code already exists; preserve that result if local logging is unavailable. */ }
     return Response.json({ credential }, { status: 201 });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not create the guest code." }, { status: 502 });
+    return Response.json({ error: error instanceof Error ? error.message : "Could not create the guest code." }, { status: 424 });
   }
 }

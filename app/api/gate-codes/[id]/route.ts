@@ -24,7 +24,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/gate-c
     const updated = updateGateCode({ householdId, id, label, pin });
     return Response.json({ code: updated });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not update this gate code." }, { status: 502 });
+    return Response.json({ error: error instanceof Error ? error.message : "Could not update this gate code." }, { status: 424 });
   }
 }
 
@@ -44,6 +44,6 @@ export async function DELETE(request: Request, context: RouteContext<"/api/gate-
     } catch { /* The controller action has already succeeded. */ }
     return Response.json({ ok: true });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not disable this gate code." }, { status: 502 });
+    return Response.json({ error: error instanceof Error ? error.message : "Could not disable this gate code." }, { status: 424 });
   }
 }

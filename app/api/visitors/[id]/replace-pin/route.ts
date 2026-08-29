@@ -23,6 +23,6 @@ export async function POST(request: Request, context: RouteContext<"/api/visitor
     saveVisitorPin({ householdId: assignment.householdId, visitorId: id, label, pin });
     return Response.json({ pin });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not save the PIN." }, { status: 502 });
+    return Response.json({ error: error instanceof Error ? error.message : "Could not save the PIN." }, { status: 424 });
   }
 }

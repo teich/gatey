@@ -282,8 +282,7 @@ export async function generateGateCodePin(): Promise<string> {
   return request<string>("/credentials/pin_codes", { method: "POST" });
 }
 
-export async function provisionGateCode(input: { householdName: string; label: string; pin: string; startsAt: Date; endsAt: Date }): Promise<{ visitorId: string }> {
-  assertControllerChangesAllowed();
+async function createGateCodeVisitor(input: { householdName: string; label: string; startsAt: Date; endsAt: Date }): Promise<string> {
   const door = await gateDoor();
   const visitor = await request<{ id: string }>("/visitors", {
     method: "POST",
@@ -299,16 +298,71 @@ export async function provisionGateCode(input: { householdName: string; label: s
       resources: [{ id: door.id, type: "door" }],
     }),
   });
+  return visitor.id;
+}
+
+async function assignVisitorPin(visitorId: string, pin: string) {
+  await request<null>(`/visitors/${encodeURIComponent(visitorId)}/pin_codes`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin_code: pin }),
+  });
+}
+
+async function removeVisitorPin(visitorId: string) {
+  await request<null>(`/visitors/${encodeURIComponent(visitorId)}/pin_codes`, { method: "DELETE" });
+}
+
+export async function provisionGateCode(input: { householdName: string; label: string; pin: string; startsAt: Date; endsAt: Date }): Promise<{ visitorId: string }> {
+  assertControllerChangesAllowed();
+  const visitorId = await createGateCodeVisitor(input);
 
   try {
-    await request<null>(`/visitors/${encodeURIComponent(visitor.id)}/pin_codes`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin_code: input.pin }),
-    });
-    return { visitorId: visitor.id };
+    await assignVisitorPin(visitorId, input.pin);
+    return { visitorId };
   } catch (error) {
-    await request<null>(`/visitors/${encodeURIComponent(visitor.id)}`, { method: "DELETE" }).catch(() => undefined);
+    await removeVisitorPin(visitorId).catch(() => undefined);
+    await request<null>(`/visitors/${encodeURIComponent(visitorId)}`, { method: "DELETE" }).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function migrateVisitorGateCode<T>(
+  input: { oldVisitorId: string; householdName: string; label: string; pin: string; startsAt: Date; endsAt: Date },
+  persist: (visitorId: string) => T,
+): Promise<{ visitorId: string; persisted: T }> {
+  assertControllerChangesAllowed();
+
+  // UniFi leaves a cancelled visitor's globally unique PIN attached. Prepare
+  // the replacement first, then move the PIN explicitly and restore it if the
+  // controller handoff or local database transaction fails.
+  const visitorId = await createGateCodeVisitor(input);
+  let oldPinRemoved = false;
+
+  try {
+    await removeVisitorPin(input.oldVisitorId);
+    oldPinRemoved = true;
+    await assignVisitorPin(visitorId, input.pin);
+    const persisted = persist(visitorId);
+
+    // The replacement is usable and durable now. A cleanup failure must not
+    // roll back the working Gatey code or tell the administrator to retry it.
+    await revokeCredential(input.oldVisitorId).catch((error) => {
+      console.error("UniFi could not archive the migrated visitor", { oldVisitorId: input.oldVisitorId, error });
+    });
+    return { visitorId, persisted };
+  } catch (error) {
+    // Revoking a visitor does not release its PIN, so detach the replacement
+    // PIN before cancelling it and restoring the original visitor.
+    await removeVisitorPin(visitorId).catch(() => undefined);
+    await request<null>(`/visitors/${encodeURIComponent(visitorId)}`, { method: "DELETE" }).catch(() => undefined);
+    if (oldPinRemoved) {
+      try {
+        await assignVisitorPin(input.oldVisitorId, input.pin);
+      } catch (restoreError) {
+        throw new Error(`Migration failed and UniFi could not restore the original PIN: ${restoreError instanceof Error ? restoreError.message : "Unknown error"}`, { cause: error });
+      }
+    }
     throw error;
   }
 }

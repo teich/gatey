@@ -58,6 +58,6 @@ export async function POST(request: Request) {
     } catch { /* The controller action has already succeeded. */ }
     return Response.json({ code }, { status: 201 });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not create this gate code." }, { status: 502 });
+    return Response.json({ error: error instanceof Error ? error.message : "Could not create this gate code." }, { status: 424 });
   }
 }

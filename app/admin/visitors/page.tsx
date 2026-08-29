@@ -25,7 +25,11 @@ export default async function VisitorsPage() {
   let visitors: Awaited<ReturnType<typeof listVisitorInventory>> = [];
   let errorMessage: string | undefined;
   try { visitors = await listVisitorInventory(); } catch (error) { errorMessage = error instanceof Error ? error.message : "Could not read UniFi Access."; }
-  const currentVisitors = visitors.filter((visitor) => !["CANCELLED", "NO_VISIT", "EXPIRED", "REVOKED"].includes(visitor.status.toUpperCase()));
+  const currentVisitors = visitors.filter((visitor) => {
+    const archived = ["CANCELLED", "NO_VISIT", "EXPIRED", "REVOKED"].includes(visitor.status.toUpperCase());
+    const interruptedMigration = visitor.status.toUpperCase() === "CANCELLED" && visitor.hasPin && assignments.has(visitor.id) && !gateyVisitors.has(visitor.id);
+    return !archived || interruptedMigration;
+  });
   const unassignedCount = currentVisitors.filter((visitor) => !assignments.has(visitor.id)).length;
 
   return <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">

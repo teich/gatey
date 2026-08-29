@@ -1,6 +1,6 @@
 import { listHouseholds } from "@/lib/households";
 import { hasGateCodePin, hasHomeCode, saveGateCode, type GateCodeKind } from "@/lib/gate-codes";
-import { provisionGateCode, revokeCredential } from "@/lib/unifi-access";
+import { migrateVisitorGateCode } from "@/lib/unifi-access";
 import { authorizeAdminRequest } from "@/lib/api-authorization";
 import { recordAuditEvent } from "@/lib/audit-log";
 
@@ -29,19 +29,19 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/v
     if (hasGateCodePin(pin)) return Response.json({ error: "That PIN is already managed by Gatey." }, { status: 409 });
     if (kind === "home" && hasHomeCode(householdId)) return Response.json({ error: "This household already has a home code." }, { status: 409 });
 
-    // UniFi PINs are globally unique. Removing the old visitor first creates a
-    // short, intentional handoff window before Gatey creates the clean record.
-    await revokeCredential(oldVisitorId);
     const startsAt = new Date();
     const endsAt = new Date(ONGOING_CONTROLLER_END);
-    const { visitorId } = await provisionGateCode({ householdName: household.name, label, pin, startsAt, endsAt });
-    const codeId = saveGateCode({ householdId, label, pin, kind, startsAt: startsAt.toISOString(), controllerEndsAt: endsAt.toISOString(), controllerVisitorId: visitorId });
+    const { persisted: codeId } = await migrateVisitorGateCode(
+      { oldVisitorId, householdName: household.name, label, pin, startsAt, endsAt },
+      (visitorId) => saveGateCode({ householdId, label, pin, kind, startsAt: startsAt.toISOString(), controllerEndsAt: endsAt.toISOString(), controllerVisitorId: visitorId }),
+    );
     try {
       const { user } = authorization.context.session;
       recordAuditEvent({ actorUserId: user.id, actorName: user.name || "Gatey administrator", householdId, householdName: household.name, action: "gate-code.migrated", outcome: "succeeded", details: { label, kind } });
     } catch { /* The controller action has already succeeded. */ }
     return Response.json({ codeId });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Migration could not be completed." }, { status: 502 });
+    console.error("Visitor migration failed", { oldVisitorId, error });
+    return Response.json({ error: error instanceof Error ? error.message : "Migration could not be completed." }, { status: 424 });
   }
 }
