@@ -19,8 +19,35 @@ fi
 
 echo "Fetching the pushed main branch…"
 git -C "$repo_root" fetch origin main
+
+unpushed_count="$(git -C "$repo_root" rev-list --count origin/main..HEAD)"
+working_tree_changes="$(git -C "$repo_root" status --porcelain)"
+if [[ "$unpushed_count" -gt 0 || -n "$working_tree_changes" ]]; then
+  echo >&2
+  echo "WARNING: Local work will not be included in this deployment." >&2
+  if [[ "$unpushed_count" -gt 0 ]]; then
+    echo "$unpushed_count local commit(s) have not been pushed to origin/main:" >&2
+    git -C "$repo_root" log --oneline origin/main..HEAD >&2
+  fi
+  if [[ -n "$working_tree_changes" ]]; then
+    echo "The working tree also has uncommitted changes:" >&2
+    git -C "$repo_root" status --short >&2
+  fi
+  echo "Gatey would deploy the older pushed origin/main instead." >&2
+  if [[ ! -t 0 ]]; then
+    echo "Stopping because confirmation requires an interactive terminal." >&2
+    exit 1
+  fi
+  read -r -p "Continue with the pushed version anyway? [y/N] " continue_reply
+  if [[ ! "$continue_reply" =~ ^[Yy]$ ]]; then
+    echo "Deployment stopped. Push your changes, then run the deploy again."
+    exit 1
+  fi
+fi
+
 expected_commit="$(git -C "$repo_root" rev-parse origin/main)"
 short_commit="$(git -C "$repo_root" rev-parse --short "$expected_commit")"
+build_number="$(git -C "$repo_root" rev-list --count "$expected_commit")"
 build_root="$deploy_temp/source"
 build_env="$deploy_temp/production.env"
 mkdir -p "$build_root"
@@ -31,9 +58,9 @@ scp "$prod_host:/etc/gatey/gatey.env" "$build_env"
 chmod 600 "$build_env"
 cp "$build_env" "$build_root/.env.production"
 
-echo "Building Gatey $short_commit locally…"
+echo "Building Gatey version $build_number ($short_commit) locally…"
 npm --prefix "$build_root" ci --no-audit --no-fund
-GATEY_DB_PATH="$deploy_temp/build.sqlite" NODE_ENV=production \
+GATEY_DB_PATH="$deploy_temp/build.sqlite" NODE_ENV=production NEXT_PUBLIC_GATEY_VERSION="$build_number" \
   npm --prefix "$build_root" run build
 
 # Standalone output deliberately omits static and public assets; put them beside

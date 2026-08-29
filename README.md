@@ -119,3 +119,8 @@ SQLite backup, fast-forwards from `origin/main`, atomically swaps the build and
 dependencies, restarts, and checks the local sign-in page. If that check fails,
 it restores the previous commit and build. Building locally keeps deployment
 within the production host's small memory limit.
+
+The admin sidebar shows a simple incrementing version number derived from the
+number of commits in the deployed `main` history. Before deploying, the script
+warns when local commits or working-tree changes are not on `origin/main` and
+asks whether to stop or intentionally deploy the older pushed version.

@@ -27,6 +27,8 @@ const navigation = [
   { title: "Activity log", href: "/admin/activity", icon: ScrollTextIcon },
 ];
 
+const gateyVersion = process.env.NEXT_PUBLIC_GATEY_VERSION || "dev";
+
 export function AppSidebar({ userName, ...props }: React.ComponentProps<typeof Sidebar> & { userName: string }) {
   const pathname = usePathname();
 
@@ -76,6 +78,7 @@ export function AppSidebar({ userName, ...props }: React.ComponentProps<typeof S
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <p className="px-2 text-[10px] font-medium tracking-wide text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">Version {gateyVersion}</p>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
