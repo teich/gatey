@@ -36,8 +36,10 @@ export type AccessSyncStatus = {
 export type AccessActivityItem = {
   id: string;
   occurredAt: string;
+  actorId?: string;
   actorName: string;
   actorType: string;
+  actorKind: "person" | "service_account" | "managed_code" | "visitor" | "other";
   householdName?: string;
   subjectLabel?: string;
   subjectType?: string;
@@ -332,12 +334,16 @@ export function seedExistingActorLinks() {
 
 export function listAccessActivity(limit = 250): AccessActivityItem[] {
   const rows = sqlite.prepare(`
-    select events.id, events.occurred_at, events.actor_display_name, events.actor_type,
+    select events.id, events.occurred_at, events.actor_controller_id, events.actor_display_name, events.actor_type,
       events.credential_provider, events.result, events.display_message, events.reason,
       events.door_name, links.subject_type, links.label as subject_label,
+      service_account.label as service_account_label,
+      person_link.controller_user_id as person_controller_user_id,
+      visitor_link.controller_visitor_id as visitor_controller_visitor_id,
       coalesce(link_household.name, visitor_household.name, person_household.name) as household_name
     from unifi_access_events events
     left join unifi_actor_links links on links.controller_actor_id = events.actor_controller_id
+    left join unifi_service_accounts service_account on service_account.controller_user_id = events.actor_controller_id
     left join organization link_household on link_household.id = links.household_id
     left join visitor_households visitor_link on visitor_link.controller_visitor_id = events.actor_controller_id
     left join organization visitor_household on visitor_household.id = visitor_link.household_id
@@ -348,21 +354,34 @@ export function listAccessActivity(limit = 250): AccessActivityItem[] {
     order by events.occurred_at desc
     limit ?
   `).all(Math.max(1, Math.min(limit, 500))) as unknown as Array<Record<string, string | null>>;
-  return rows.map((row) => ({
-    id: String(row.id),
-    occurredAt: String(row.occurred_at),
-    actorName: String(row.subject_label || row.actor_display_name || "Unknown"),
-    actorType: String(row.actor_type || ""),
-    ...(row.household_name ? { householdName: String(row.household_name) } : {}),
-    ...(row.subject_label ? { subjectLabel: String(row.subject_label) } : {}),
-    ...(row.subject_type ? { subjectType: String(row.subject_type) } : {}),
-    credentialProvider: String(row.credential_provider || ""),
-    result: String(row.result || ""),
-    displayMessage: String(row.display_message || ""),
-    reason: String(row.reason || ""),
-    doorName: String(row.door_name || "Gate"),
-    attributable: Boolean(row.subject_label || row.household_name),
-  }));
+  return rows.map((row) => {
+    const actorKind: AccessActivityItem["actorKind"] = row.service_account_label
+      ? "service_account"
+      : row.subject_type
+        ? "managed_code"
+        : row.person_controller_user_id
+          ? "person"
+          : row.visitor_controller_visitor_id || row.actor_type === "visitor"
+            ? "visitor"
+            : "other";
+    return {
+      id: String(row.id),
+      occurredAt: String(row.occurred_at),
+      ...(row.actor_controller_id ? { actorId: String(row.actor_controller_id) } : {}),
+      actorName: String(row.subject_label || row.service_account_label || row.actor_display_name || "Unknown"),
+      actorType: String(row.actor_type || ""),
+      actorKind,
+      ...(row.household_name ? { householdName: String(row.household_name) } : {}),
+      ...(row.subject_label ? { subjectLabel: String(row.subject_label) } : {}),
+      ...(row.subject_type ? { subjectType: String(row.subject_type) } : {}),
+      credentialProvider: String(row.credential_provider || ""),
+      result: String(row.result || ""),
+      displayMessage: String(row.display_message || ""),
+      reason: String(row.reason || ""),
+      doorName: String(row.door_name || "Gate"),
+      attributable: Boolean(row.subject_label || row.household_name || row.service_account_label),
+    };
+  });
 }
 
 export function accessActivityTotals(windowDays = 30) {
