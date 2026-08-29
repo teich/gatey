@@ -229,14 +229,21 @@ export function listActorUsageSummaries(actorIds: string[], windowDays = USAGE_W
   const placeholders = uniqueIds.map(() => "?").join(",");
   const since = new Date(Date.now() - windowDays * 86_400_000).toISOString();
   const rows = sqlite.prepare(`
-    select actor_controller_id as key, occurred_at
-    from unifi_access_events
-    where actor_controller_id in (${placeholders})
-      and event_type = 'access.door.unlock'
-      and result = 'ACCESS'
-      and credential_provider = 'PIN_CODE'
-      and occurred_at >= ?
-    order by occurred_at desc
+    select coalesce(current_link.controller_actor_id, events.actor_controller_id) as key,
+      events.occurred_at
+    from unifi_access_events events
+    left join unifi_actor_links historical_link
+      on historical_link.controller_actor_id = events.actor_controller_id
+    left join unifi_actor_links current_link
+      on current_link.subject_type = historical_link.subject_type
+      and current_link.subject_id = historical_link.subject_id
+      and current_link.role = 'current'
+    where coalesce(current_link.controller_actor_id, events.actor_controller_id) in (${placeholders})
+      and events.event_type = 'access.door.unlock'
+      and events.result = 'ACCESS'
+      and events.credential_provider = 'PIN_CODE'
+      and events.occurred_at >= ?
+    order by events.occurred_at desc
   `).all(...uniqueIds, since) as unknown as UsageRow[];
   return summarizeUsage(rows, uniqueIds, windowDays);
 }
