@@ -23,8 +23,8 @@
     "spike:unifi:visitor": "node --env-file-if-exists=.env spikes/unifi-access/visitor-lifecycle.mjs"
   },
   "dependencies": {
-    "@better-auth/drizzle-adapter": "1.7.2",
     "@base-ui/react": "^1.7.0",
+    "@better-auth/drizzle-adapter": "1.7.2",
     "better-auth": "^1.7.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -44,7 +44,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "1.0.0-rc.4",
-    "eslint": "^9",
+    "eslint": "^9.39.5",
     "eslint-config-next": "16.3.3",
     "tailwindcss": "^4",
     "typescript": "^5"
