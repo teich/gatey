@@ -1,6 +1,7 @@
 import "server-only";
 
-import { database } from "@/lib/database";
+import { randomUUID } from "node:crypto";
+import { database } from "./database.ts";
 
 export type PersonLink = {
   controllerUserId: string;
@@ -92,6 +93,49 @@ export function linkUnifiPerson(controllerUserId: string, userId: string) {
 
 export function assignPersonRecords(controllerUserId: string, householdId: string) {
   database.prepare("UPDATE person_pins SET household_id = ? WHERE controller_user_id = ?").run(householdId, controllerUserId);
+}
+
+function personHouseholdMove(userId: string, householdId: string) {
+  const target = database.prepare("SELECT id FROM organization WHERE id = ?").get(householdId);
+  if (!target) throw new Error("Household not found.");
+
+  const memberships = database.prepare(`
+    SELECT id, organizationId, role
+    FROM member
+    WHERE userId = ?
+  `).all(userId) as Array<{ id: string; organizationId: string; role: string }>;
+  if (memberships.length > 1) throw new Error("This account belongs to more than one household. Resolve its memberships before moving it.");
+  const current = memberships[0];
+  if (current?.organizationId === householdId) return { current, changeRequired: false };
+  if (current?.role.split(",").includes("owner")) throw new Error("Household owners cannot be moved until ownership is transferred.");
+  return { current, changeRequired: true };
+}
+
+export function validatePersonHouseholdReassignment(userId: string, householdId: string) {
+  personHouseholdMove(userId, householdId);
+}
+
+export function reassignPersonHousehold(controllerUserId: string, userId: string, householdId: string) {
+  const { current, changeRequired } = personHouseholdMove(userId, householdId);
+  if (!changeRequired) return;
+
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    if (current) {
+      database.prepare("UPDATE member SET organizationId = ? WHERE id = ?").run(householdId, current.id);
+    } else {
+      database.prepare(`
+        INSERT INTO member (id, organizationId, userId, role, createdAt)
+        VALUES (?, ?, ?, 'member', ?)
+      `).run(randomUUID(), householdId, userId, new Date().toISOString());
+    }
+    database.prepare("UPDATE person_pins SET household_id = ? WHERE controller_user_id = ?").run(householdId, controllerUserId);
+    database.prepare("UPDATE session SET activeOrganizationId = ? WHERE userId = ?").run(householdId, userId);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function unlinkUnifiPerson(controllerUserId: string) {
