@@ -1,6 +1,7 @@
 import { ResidentHome } from "@/app/resident-home";
 import { requirePageHousehold } from "@/lib/authorization";
 import { camerasConfigured } from "@/lib/camera-snapshots";
+import { listHouseholdPermanentCodes } from "@/lib/db";
 import { listUserPhoneNumbers } from "@/lib/phone-access";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export default async function HomePage() {
       householdName={household.name}
       userName={session.user.name}
       isSystemAdmin={isSystemAdmin}
+      storedPermanentCodes={listHouseholdPermanentCodes(household.id)}
       camerasConfigured={camerasConfigured()}
       gatePhoneNumber={canCallGate ? process.env.TWILIO_PHONE_NUMBER || "" : ""}
     />

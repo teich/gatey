@@ -259,19 +259,23 @@ export function ResidentHome({
   householdName,
   userName,
   isSystemAdmin,
+  storedPermanentCodes,
   camerasConfigured,
   gatePhoneNumber,
 }: {
   householdName: string;
   userName: string;
   isSystemAdmin: boolean;
+  storedPermanentCodes: Array<{ id: string; label: string; pin: string }>;
   camerasConfigured: boolean;
   gatePhoneNumber: string;
 }) {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>("gate");
   const [guestCodes, setGuestCodes] = useState<GuestCode[]>([]);
-  const [permanentCodes, setPermanentCodes] = useState<PermanentCode[]>([]);
+  const [permanentCodes, setPermanentCodes] = useState<PermanentCode[]>(() =>
+    storedPermanentCodes.map((code) => ({ ...code, kind: "person" })),
+  );
   const [ready, setReady] = useState(false);
   const [gateState, setGateState] = useState<GateState>("unknown");
   const [gateOpening, setGateOpening] = useState(false);
@@ -325,11 +329,18 @@ export function ResidentHome({
       })
       .then(({ codes }) => {
         setGuestCodes(codes.filter((code) => code.kind === "temporary"));
-        setPermanentCodes(codes.filter((code) => code.kind !== "temporary" && code.state === "active").map((code) => ({ ...code, kind: code.kind === "home" ? "household" : "person" })));
+        const managedPermanentCodes: PermanentCode[] = codes
+          .filter((code) => code.kind !== "temporary" && code.state === "active")
+          .map((code) => ({ ...code, kind: code.kind === "home" ? "household" : "person" }));
+        const managedPins = new Set(managedPermanentCodes.map((code) => code.pin));
+        const existingPersonCodes: PermanentCode[] = storedPermanentCodes
+          .filter((code) => !managedPins.has(code.pin))
+          .map((code) => ({ ...code, kind: "person" }));
+        setPermanentCodes([...managedPermanentCodes, ...existingPersonCodes]);
       })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your gate codes."))
       .finally(() => setReady(true));
-  }, []);
+  }, [storedPermanentCodes]);
 
   const refreshGate = useCallback(async () => {
     const response = await fetch("/api/gate", { cache: "no-store" });
