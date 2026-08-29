@@ -12,5 +12,5 @@ export function SignOutButton() {
     router.refresh();
   }
 
-  return <button className="secondary-action" type="button" onClick={signOut}>Sign out</button>;
+  return <button className="auth-secondary-action" type="button" onClick={signOut}>Sign out</button>;
 }

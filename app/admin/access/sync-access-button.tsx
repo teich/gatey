@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
 export function SyncAccessButton() {
   const router = useRouter();
@@ -23,5 +24,5 @@ export function SyncAccessButton() {
     }
   }
 
-  return <div className="flex flex-col items-end gap-2"><button className="primary-action" type="button" disabled={working} onClick={() => void sync()}>{working ? "Syncing…" : "Sync now"}</button>{error ? <span className="max-w-sm text-right text-xs text-destructive">{error}</span> : null}</div>;
+  return <div className="flex flex-col items-end gap-2"><Button size="lg" type="button" disabled={working} onClick={() => void sync()}>{working ? "Syncing…" : "Sync now"}</Button>{error ? <span className="max-w-sm text-right text-xs text-destructive">{error}</span> : null}</div>;
 }

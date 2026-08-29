@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import type { HouseholdAdminRecord } from "@/lib/households";
 
 async function requestJson(url: string, init: RequestInit) {
@@ -92,7 +93,7 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
       <form className="household-form household-create-form" onSubmit={createHousehold}>
         <label>Household name<input value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Smith household" required /></label>
         <label>Short URL name <span>Optional</span><input value={newSlug} onChange={(event) => setNewSlug(event.target.value)} placeholder="smith-household" /></label>
-        <button className="primary-action" type="submit" disabled={working === "create-household"}>{working === "create-household" ? "Creating…" : "Create household"}</button>
+        <Button className="h-[46px] px-4" type="submit" disabled={working === "create-household"}>{working === "create-household" ? "Creating…" : "Create household"}</Button>
       </form>
     </section>
     {error ? <p className="form-error household-error" role="alert">{error}</p> : null}
@@ -101,7 +102,7 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
         <form className="household-form household-edit-form" onSubmit={(event) => void updateHousehold(event, household.id)}>
           <label>Household name<input name="name" defaultValue={household.name} required /></label>
           <label>Short URL name<input name="slug" defaultValue={household.slug} required /></label>
-          <button className="secondary-action" type="submit" disabled={working === `update-${household.id}`}>{working === `update-${household.id}` ? "Saving…" : "Save changes"}</button>
+          <Button className="h-[46px] px-4" variant="outline" type="submit" disabled={working === `update-${household.id}`}>{working === `update-${household.id}` ? "Saving…" : "Save changes"}</Button>
           {household.id !== "oren-home" ? <button className="text-button danger" type="button" disabled={working === `delete-${household.id}`} onClick={() => void deleteHousehold(household)}>Delete household</button> : <span className="household-protected">Initial household</span>}
         </form>
         <div className="household-people">

@@ -57,7 +57,7 @@ export function SignInForm() {
         required
       />
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="primary-action" type="submit" disabled={pending}>
+      <button className="auth-primary-action" type="submit" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </button>
     </form>
