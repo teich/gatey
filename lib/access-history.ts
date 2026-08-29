@@ -345,7 +345,7 @@ export function listAccessActivity(limit = 250): AccessActivityItem[] {
       events.credential_provider, events.result, events.display_message, events.reason,
       events.door_name, links.subject_type, links.label as subject_label,
       service_account.label as service_account_label,
-      person_link.controller_user_id as person_controller_user_id,
+      gatey_user.id as person_user_id,
       visitor_link.controller_visitor_id as visitor_controller_visitor_id,
       coalesce(link_household.name, visitor_household.name, person_household.name) as household_name
     from unifi_access_events events
@@ -355,7 +355,8 @@ export function listAccessActivity(limit = 250): AccessActivityItem[] {
     left join visitor_households visitor_link on visitor_link.controller_visitor_id = events.actor_controller_id
     left join organization visitor_household on visitor_household.id = visitor_link.household_id
     left join unifi_person_links person_link on person_link.controller_user_id = events.actor_controller_id
-    left join member person_member on person_member.user_id = person_link.user_id
+    left join user gatey_user on gatey_user.id = coalesce(person_link.user_id, events.actor_controller_id)
+    left join member person_member on person_member.user_id = gatey_user.id
     left join organization person_household on person_household.id = person_member.organization_id
     group by events.id
     order by events.occurred_at desc
@@ -366,7 +367,7 @@ export function listAccessActivity(limit = 250): AccessActivityItem[] {
       ? "service_account"
       : row.subject_type
         ? "managed_code"
-        : row.person_controller_user_id
+        : row.person_user_id
           ? "person"
           : row.visitor_controller_visitor_id || row.actor_type === "visitor"
             ? "visitor"
@@ -386,7 +387,7 @@ export function listAccessActivity(limit = 250): AccessActivityItem[] {
       displayMessage: String(row.display_message || ""),
       reason: String(row.reason || ""),
       doorName: String(row.door_name || "Gate"),
-      attributable: Boolean(row.subject_label || row.household_name || row.service_account_label),
+      attributable: Boolean(row.subject_label || row.person_user_id || row.household_name || row.service_account_label),
     };
   });
 }
