@@ -60,6 +60,7 @@ cp "$build_env" "$build_root/.env.production"
 
 echo "Building Gatey version $build_number ($short_commit) locally…"
 npm --prefix "$build_root" ci --no-audit --no-fund
+GATEY_DB_PATH="$deploy_temp/build.sqlite" node "$build_root/scripts/migrate.mjs"
 GATEY_DB_PATH="$deploy_temp/build.sqlite" NODE_ENV=production NEXT_PUBLIC_GATEY_VERSION="$build_number" \
   npm --prefix "$build_root" run build
 
@@ -71,6 +72,10 @@ if [[ ! -f "$build_root/.next/standalone/server.js" ]]; then
 fi
 mkdir -p "$build_root/.next/standalone/.next"
 cp -R "$build_root/.next/static" "$build_root/.next/standalone/.next/"
+mkdir -p "$build_root/.next/standalone/scripts" "$build_root/.next/standalone/node_modules"
+cp "$build_root/scripts/migrate.mjs" "$build_root/.next/standalone/scripts/"
+cp -R "$build_root/drizzle" "$build_root/.next/standalone/"
+cp -R "$build_root/node_modules/drizzle-orm" "$build_root/.next/standalone/node_modules/"
 if [[ -d "$build_root/public" ]]; then
   cp -R "$build_root/public" "$build_root/.next/standalone/"
 fi
@@ -143,9 +148,6 @@ fi
 
 install -d -o "$app_user" -g "$app_user" -m 700 "$backup_dir"
 backup="$backup_dir/gatey-$(date -u +%Y%m%dT%H%M%SZ).sqlite"
-runuser -u "$app_user" -- sqlite3 "$database" ".backup '$backup'"
-chmod 600 "$backup"
-echo "Database backup: $backup"
 
 runuser -u "$app_user" -- git -C "$repo" fetch --prune origin main
 remote_commit="$(runuser -u "$app_user" -- git -C "$repo" rev-parse origin/main)"
@@ -168,15 +170,34 @@ if [[ -e "$next_backup" ]]; then
 fi
 
 rollback() {
-  echo "The new release failed its health check; restoring $previous_commit…" >&2
+  echo "The new release failed; restoring $previous_commit and its database…" >&2
   systemctl stop "$service" || true
-  if [[ -d "$repo/.next" ]]; then mv "$repo/.next" "$stage/.next.failed"; fi
-  if [[ -d "$next_backup" ]]; then mv "$next_backup" "$repo/.next"; fi
+  if [[ -d "$next_backup" ]]; then
+    if [[ -d "$repo/.next" ]]; then mv "$repo/.next" "$stage/.next.failed"; fi
+    mv "$next_backup" "$repo/.next"
+  fi
+  runuser -u "$app_user" -- sqlite3 "$backup" ".restore '$database'"
   runuser -u "$app_user" -- git -C "$repo" reset --hard "$previous_commit"
   systemctl start "$service"
 }
 
 systemctl stop "$service"
+if ! runuser -u "$app_user" -- sqlite3 "$database" ".backup '$backup'"; then
+  runuser -u "$app_user" -- git -C "$repo" reset --hard "$previous_commit"
+  systemctl start "$service"
+  rm -rf "$stage"
+  rm -f "$remote_artifact"
+  exit 1
+fi
+chmod 600 "$backup"
+echo "Database backup: $backup"
+
+if ! runuser -u "$app_user" -- env GATEY_DB_PATH="$database" node "$stage/.next/standalone/scripts/migrate.mjs"; then
+  rollback
+  rm -rf "$stage"
+  rm -f "$remote_artifact"
+  exit 1
+fi
 if [[ -d "$repo/.next" ]]; then mv "$repo/.next" "$next_backup"; fi
 mv "$stage/.next" "$repo/.next"
 chown -R "$app_user:$app_user" "$repo/.next"

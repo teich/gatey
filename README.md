@@ -63,9 +63,11 @@ openssl rand -base64 32
 
 Set `BETTER_AUTH_URL` to the browser origin (`http://localhost:3000` locally and the public HTTPS origin in production).
 
-Create the first administrator with Gatey's Better Auth bootstrap helper:
+Apply the checked-in database migrations, then create the first administrator
+with Gatey's Better Auth bootstrap helper:
 
 ```bash
+npm run db:migrate
 npm run auth:create-admin
 ```
 
@@ -76,7 +78,18 @@ The command asks for the password twice and creates Oren with:
 - app role: `admin`
 - `oren-home` organization role: `owner`
 
-The organization membership is added by the auth creation hook. The checked-in migrations are applied automatically when Gatey first opens its database.
+The organization membership is added by the auth creation hook. Drizzle records
+each applied migration and only runs new ones. Treat generated migrations as
+immutable after they have been applied.
+
+After changing [the typed schema](./lib/schema.ts), generate and inspect a new
+migration before applying it locally:
+
+```bash
+npm run db:generate -- --name=describe_the_change
+npm run db:check
+npm run db:migrate
+```
 
 Running the same command again resets Oren's password instead of creating a duplicate and revokes existing sessions. The explicit reset alias is equivalent:
 
@@ -115,10 +128,11 @@ npm run deploy:prod
 The deployment script builds the pushed `main` branch locally with Node 26,
 uploads the build, and connects as root to manage systemd and the database
 backup directory. It refuses a dirty production checkout, creates a consistent
-SQLite backup, fast-forwards from `origin/main`, atomically swaps the build and
-dependencies, restarts, and checks the local sign-in page. If that check fails,
-it restores the previous commit and build. Building locally keeps deployment
-within the production host's small memory limit.
+SQLite backup, fast-forwards from `origin/main`, stops Gatey, applies only new
+migrations, atomically swaps the build and dependencies, restarts, and checks
+the local sign-in page. If migration or the health check fails, it restores the
+previous database, commit, and build. Building locally keeps deployment within
+the production host's small memory limit.
 
 The admin sidebar shows a simple incrementing version number derived from the
 number of commits in the deployed `main` history. Before deploying, the script

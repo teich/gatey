@@ -1,7 +1,9 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { and, desc, eq } from "drizzle-orm";
 import { database } from "@/lib/database";
+import { organization, twilioActionAttempts, twilioEvents, user } from "@/lib/schema";
 
 export type TwilioAction = "open" | "hold_open";
 export type TwilioActionStatus = "pending" | "succeeded" | "failed" | "unknown";
@@ -24,13 +26,6 @@ export type TwilioEvent = {
   householdName: string | null;
 };
 
-type AttemptRow = {
-  callSid: string;
-  action: TwilioAction;
-  status: TwilioActionStatus;
-  detail: string;
-};
-
 export function recordTwilioEvent(input: {
   event: string;
   detail?: string;
@@ -39,10 +34,16 @@ export function recordTwilioEvent(input: {
   actorUserId?: string;
   householdId?: string;
 }) {
-  database.prepare(`
-    INSERT INTO twilio_events (id, occurred_at, call_sid, caller_e164, event, detail, actor_user_id, household_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(randomUUID(), new Date().toISOString(), input.callSid || "", input.callerE164 || "", input.event, input.detail || "", input.actorUserId || null, input.householdId || null);
+  database.insert(twilioEvents).values({
+    id: randomUUID(),
+    occurredAt: new Date().toISOString(),
+    callSid: input.callSid || "",
+    callerE164: input.callerE164 || "",
+    event: input.event,
+    detail: input.detail || "",
+    actorUserId: input.actorUserId || null,
+    householdId: input.householdId || null,
+  }).run();
 }
 
 export function beginTwilioAction(input: {
@@ -56,50 +57,54 @@ export function beginTwilioAction(input: {
 }): { attempt: TwilioActionAttempt; created: boolean } {
   if (!input.callSid) throw new Error("Twilio did not provide a CallSid.");
   const id = randomUUID();
-  const result = database.prepare(`
-    INSERT OR IGNORE INTO twilio_action_attempts
-      (id, call_sid, action, caller_e164, actor_user_id, actor_name, household_id, household_name, status, requested_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
-  `).run(id, input.callSid, input.action, input.callerE164, input.actorUserId, input.actorName, input.householdId, input.householdName, new Date().toISOString());
-  const row = database.prepare(`
-    SELECT call_sid AS callSid, action, status, detail
-    FROM twilio_action_attempts WHERE call_sid = ? AND action = ?
-  `).get(input.callSid, input.action) as AttemptRow | undefined;
+  const result = database.insert(twilioActionAttempts).values({
+    id,
+    callSid: input.callSid,
+    action: input.action,
+    callerE164: input.callerE164,
+    actorUserId: input.actorUserId,
+    actorName: input.actorName,
+    householdId: input.householdId,
+    householdName: input.householdName,
+    status: "pending",
+    requestedAt: new Date().toISOString(),
+  }).onConflictDoNothing().run();
+  const row = database.select({
+    callSid: twilioActionAttempts.callSid,
+    action: twilioActionAttempts.action,
+    status: twilioActionAttempts.status,
+    detail: twilioActionAttempts.detail,
+  }).from(twilioActionAttempts)
+    .where(and(eq(twilioActionAttempts.callSid, input.callSid), eq(twilioActionAttempts.action, input.action))).get();
   if (!row) throw new Error("The Twilio action reservation could not be read.");
   return { attempt: row, created: Boolean(result.changes) };
 }
 
 export function finishTwilioAction(callSid: string, action: TwilioAction, status: Exclude<TwilioActionStatus, "pending">, detail = "") {
-  database.prepare(`
-    UPDATE twilio_action_attempts
-    SET status = ?, completed_at = ?, detail = ?
-    WHERE call_sid = ? AND action = ? AND status = 'pending'
-  `).run(status, new Date().toISOString(), detail.slice(0, 500), callSid, action);
+  database.update(twilioActionAttempts).set({ status, completedAt: new Date().toISOString(), detail: detail.slice(0, 500) })
+    .where(and(eq(twilioActionAttempts.callSid, callSid), eq(twilioActionAttempts.action, action), eq(twilioActionAttempts.status, "pending"))).run();
 }
 
 export function recoverPendingTwilioActions(): number {
-  return Number(database.prepare(`
-    UPDATE twilio_action_attempts
-    SET status = 'unknown', completed_at = ?, detail = 'Gatey restarted before the controller result was recorded.'
-    WHERE status = 'pending'
-  `).run(new Date().toISOString()).changes);
+  return Number(database.update(twilioActionAttempts).set({
+    status: "unknown",
+    completedAt: new Date().toISOString(),
+    detail: "Gatey restarted before the controller result was recorded.",
+  }).where(eq(twilioActionAttempts.status, "pending")).run().changes);
 }
 
 export function listTwilioEvents(limit = 200): TwilioEvent[] {
-  return database.prepare(`
-    SELECT
-      twilio_events.id,
-      twilio_events.occurred_at AS occurredAt,
-      twilio_events.call_sid AS callSid,
-      twilio_events.caller_e164 AS callerE164,
-      twilio_events.event,
-      twilio_events.detail,
-      user.name AS actorName,
-      organization.name AS householdName
-    FROM twilio_events
-    LEFT JOIN user ON user.id = twilio_events.actor_user_id
-    LEFT JOIN organization ON organization.id = twilio_events.household_id
-    ORDER BY twilio_events.occurred_at DESC
-    LIMIT ?
-  `).all(Math.max(1, Math.min(limit, 500))) as TwilioEvent[];
+  return database.select({
+    id: twilioEvents.id,
+    occurredAt: twilioEvents.occurredAt,
+    callSid: twilioEvents.callSid,
+    callerE164: twilioEvents.callerE164,
+    event: twilioEvents.event,
+    detail: twilioEvents.detail,
+    actorName: user.name,
+    householdName: organization.name,
+  }).from(twilioEvents)
+    .leftJoin(user, eq(user.id, twilioEvents.actorUserId))
+    .leftJoin(organization, eq(organization.id, twilioEvents.householdId))
+    .orderBy(desc(twilioEvents.occurredAt)).limit(Math.max(1, Math.min(limit, 500))).all();
 }

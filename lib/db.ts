@@ -1,17 +1,11 @@
 import "server-only";
 
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { Credential, CredentialState } from "@/lib/credentials";
 import { database } from "@/lib/database";
+import { credentials, personPins, visitorHouseholds, visitorPins } from "@/lib/schema";
 
-type CredentialRow = {
-  id: string;
-  label: string;
-  pin: string;
-  starts_at: string;
-  ends_at: string;
-  state: CredentialState;
-  revoked_at: string | null;
-};
+type CredentialRow = Pick<typeof credentials.$inferSelect, "id" | "label" | "pin" | "startsAt" | "endsAt" | "state" | "revokedAt">;
 
 export type HouseholdPermanentCode = {
   id: string;
@@ -28,145 +22,109 @@ export type CredentialUsageLookup = {
 
 function mapCredential(row: CredentialRow): Credential {
   const now = Date.now();
-  const computedState: CredentialState = row.revoked_at
+  const computedState: CredentialState = row.revokedAt
     ? "revoked"
-    : new Date(row.starts_at).getTime() > now
+    : new Date(row.startsAt).getTime() > now
       ? "upcoming"
-      : new Date(row.ends_at).getTime() < now
+      : new Date(row.endsAt).getTime() < now
         ? "expired"
         : row.state;
   return {
     id: row.id,
     label: row.label,
     pin: row.pin,
-    startsAt: row.starts_at,
-    endsAt: row.ends_at,
+    startsAt: row.startsAt,
+    endsAt: row.endsAt,
     state: computedState,
-    ...(row.revoked_at ? { revokedAt: row.revoked_at } : {}),
+    ...(row.revokedAt ? { revokedAt: row.revokedAt } : {}),
   };
 }
 
 export function listCredentials(householdId: string): Credential[] {
-  const rows = database.prepare(`
-    SELECT id, label, pin, starts_at, ends_at, state, revoked_at
-    FROM credentials
-    WHERE household_id = ?
-    ORDER BY starts_at DESC, created_at DESC
-  `).all(householdId) as CredentialRow[];
+  const rows = database.select({
+    id: credentials.id,
+    label: credentials.label,
+    pin: credentials.pin,
+    startsAt: credentials.startsAt,
+    endsAt: credentials.endsAt,
+    state: credentials.state,
+    revokedAt: credentials.revokedAt,
+  }).from(credentials).where(eq(credentials.householdId, householdId))
+    .orderBy(desc(credentials.startsAt), desc(credentials.createdAt)).all();
   return rows.map(mapCredential);
 }
 
 export function listCredentialUsageLookups(householdId: string): CredentialUsageLookup[] {
-  return database.prepare(`
-    SELECT id, controller_visitor_id AS controllerVisitorId, starts_at AS startsAt, ends_at AS endsAt
-    FROM credentials
-    WHERE household_id = ?
-  `).all(householdId) as CredentialUsageLookup[];
+  return database.select({ id: credentials.id, controllerVisitorId: credentials.controllerVisitorId, startsAt: credentials.startsAt, endsAt: credentials.endsAt })
+    .from(credentials).where(eq(credentials.householdId, householdId)).all();
 }
 
 export function listHouseholdPermanentCodes(householdId: string): HouseholdPermanentCode[] {
-  const rows = database.prepare(`
-    SELECT controller_user_id AS id, label, pin
-    FROM person_pins
-    WHERE household_id = ?
-    ORDER BY replaced_at ASC, label COLLATE NOCASE
-  `).all(householdId) as HouseholdPermanentCode[];
-  return rows.map((row) => ({ id: row.id, label: row.label, pin: row.pin }));
+  return database.select({ id: personPins.controllerUserId, label: personPins.label, pin: personPins.pin })
+    .from(personPins).where(eq(personPins.householdId, householdId))
+    .orderBy(asc(personPins.replacedAt), sql`${personPins.label} collate nocase`).all();
 }
 
 export function insertCredential(householdId: string, credential: Credential, controllerVisitorId: string) {
   const createdAt = new Date().toISOString();
-  database.exec("BEGIN IMMEDIATE");
-  try {
-    database.prepare(`
-      INSERT INTO credentials (id, household_id, label, pin, starts_at, ends_at, controller_visitor_id, state, revoked_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      credential.id,
+  database.transaction((tx) => {
+    tx.insert(credentials).values({
+      id: credential.id,
       householdId,
-      credential.label,
-      credential.pin,
-      credential.startsAt,
-      credential.endsAt,
+      label: credential.label,
+      pin: credential.pin,
+      startsAt: credential.startsAt,
+      endsAt: credential.endsAt,
       controllerVisitorId,
-      credential.state,
-      credential.revokedAt ?? null,
+      state: credential.state,
+      revokedAt: credential.revokedAt ?? null,
       createdAt,
-    );
-    database.prepare(`
-      INSERT INTO visitor_households (controller_visitor_id, household_id, assigned_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(controller_visitor_id) DO UPDATE SET household_id = excluded.household_id
-    `).run(controllerVisitorId, householdId, createdAt);
-    database.exec("COMMIT");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
+    }).run();
+    tx.insert(visitorHouseholds).values({ controllerVisitorId, householdId, assignedAt: createdAt })
+      .onConflictDoUpdate({ target: visitorHouseholds.controllerVisitorId, set: { householdId } }).run();
+  }, { behavior: "immediate" });
 }
 
 export function getControllerVisitorId(householdId: string, id: string): string | undefined {
-  const row = database.prepare("SELECT controller_visitor_id FROM credentials WHERE id = ? AND household_id = ?").get(id, householdId) as { controller_visitor_id?: string } | undefined;
-  return row?.controller_visitor_id;
+  return database.select({ controllerVisitorId: credentials.controllerVisitorId }).from(credentials)
+    .where(and(eq(credentials.id, id), eq(credentials.householdId, householdId))).get()?.controllerVisitorId;
 }
 
 export function managedVisitorIds(): Set<string> {
-  const rows = database.prepare("SELECT controller_visitor_id FROM credentials").all() as Array<{ controller_visitor_id: string }>;
-  return new Set(rows.map((row) => row.controller_visitor_id));
+  const rows = database.select({ controllerVisitorId: credentials.controllerVisitorId }).from(credentials).all();
+  return new Set(rows.map((row) => row.controllerVisitorId));
 }
 
 export function managedVisitorPins(): Map<string, string> {
-  const rows = database.prepare(`
-    SELECT controller_visitor_id AS id, pin FROM credentials
-    UNION ALL
-    SELECT controller_visitor_id AS id, pin FROM visitor_pins
-  `).all() as Array<{ id: string; pin: string }>;
+  const rows = [
+    ...database.select({ id: credentials.controllerVisitorId, pin: credentials.pin }).from(credentials).all(),
+    ...database.select({ id: visitorPins.controllerVisitorId, pin: visitorPins.pin }).from(visitorPins).all(),
+  ];
   return new Map(rows.map((row) => [row.id, row.pin]));
 }
 
 export function saveVisitorPin(input: { householdId: string; visitorId: string; label: string; pin: string }) {
   const replacedAt = new Date().toISOString();
-  database.exec("BEGIN IMMEDIATE");
-  try {
-    database.prepare(`
-      INSERT INTO visitor_pins (controller_visitor_id, household_id, label, pin, replaced_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(controller_visitor_id) DO UPDATE SET
-        household_id = excluded.household_id,
-        label = excluded.label,
-        pin = excluded.pin,
-        replaced_at = excluded.replaced_at
-    `).run(input.visitorId, input.householdId, input.label, input.pin, replacedAt);
-    database.prepare("UPDATE credentials SET pin = ? WHERE controller_visitor_id = ? AND household_id = ?").run(input.pin, input.visitorId, input.householdId);
-    database.prepare(`
-      INSERT INTO visitor_households (controller_visitor_id, household_id, assigned_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(controller_visitor_id) DO UPDATE SET household_id = excluded.household_id
-    `).run(input.visitorId, input.householdId, replacedAt);
-    database.exec("COMMIT");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
+  database.transaction((tx) => {
+    const pinValues = { controllerVisitorId: input.visitorId, householdId: input.householdId, label: input.label, pin: input.pin, replacedAt };
+    tx.insert(visitorPins).values(pinValues).onConflictDoUpdate({ target: visitorPins.controllerVisitorId, set: pinValues }).run();
+    tx.update(credentials).set({ pin: input.pin }).where(and(eq(credentials.controllerVisitorId, input.visitorId), eq(credentials.householdId, input.householdId))).run();
+    tx.insert(visitorHouseholds).values({ controllerVisitorId: input.visitorId, householdId: input.householdId, assignedAt: replacedAt })
+      .onConflictDoUpdate({ target: visitorHouseholds.controllerVisitorId, set: { householdId: input.householdId } }).run();
+  }, { behavior: "immediate" });
 }
 
 export function managedPersonPins(): Map<string, string> {
-  const rows = database.prepare("SELECT controller_user_id, pin FROM person_pins").all() as Array<{ controller_user_id: string; pin: string }>;
-  return new Map(rows.map((row) => [row.controller_user_id, row.pin]));
+  const rows = database.select({ controllerUserId: personPins.controllerUserId, pin: personPins.pin }).from(personPins).all();
+  return new Map(rows.map((row) => [row.controllerUserId, row.pin]));
 }
 
 export function savePersonPin(input: { householdId: string; userId: string; label: string; pin: string }) {
-  database.prepare(`
-    INSERT INTO person_pins (controller_user_id, household_id, label, pin, replaced_at)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(controller_user_id) DO UPDATE SET
-      household_id = excluded.household_id,
-      label = excluded.label,
-      pin = excluded.pin,
-      replaced_at = excluded.replaced_at
-  `).run(input.userId, input.householdId, input.label, input.pin, new Date().toISOString());
+  const values = { controllerUserId: input.userId, householdId: input.householdId, label: input.label, pin: input.pin, replacedAt: new Date().toISOString() };
+  database.insert(personPins).values(values).onConflictDoUpdate({ target: personPins.controllerUserId, set: values }).run();
 }
 
 export function markRevoked(householdId: string, id: string) {
-  database.prepare("UPDATE credentials SET state = 'revoked', revoked_at = ? WHERE id = ? AND household_id = ?").run(new Date().toISOString(), id, householdId);
+  database.update(credentials).set({ state: "revoked", revokedAt: new Date().toISOString() })
+    .where(and(eq(credentials.id, id), eq(credentials.householdId, householdId))).run();
 }

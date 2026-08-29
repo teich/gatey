@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { sql } from "drizzle-orm";
 import { database } from "../lib/database.ts";
+import { user, userPhoneNumbers } from "../lib/schema.ts";
 
 function usage() {
   console.log("Usage: npm run phones:import -- --callers <allowed-callers.toml> [--map <phone-map.json>] [--apply]");
@@ -64,9 +66,11 @@ if (!callersFile || process.argv.includes("--help")) {
       const mappedEmail = mappings[phone];
       let users;
       if (mappedEmail) {
-        users = database.prepare('SELECT id, name, email FROM "user" WHERE lower(email) = lower(?)').all(mappedEmail);
+        users = database.select({ id: user.id, name: user.name, email: user.email }).from(user)
+          .where(sql`lower(${user.email}) = lower(${mappedEmail})`).all();
       } else {
-        users = database.prepare('SELECT id, name, email FROM "user" WHERE lower(name) = lower(?)').all(String(caller.name || ""));
+        users = database.select({ id: user.id, name: user.name, email: user.email }).from(user)
+          .where(sql`lower(${user.name}) = lower(${String(caller.name || "")})`).all();
       }
       if (users.length !== 1) {
         hasErrors = true;
@@ -89,25 +93,15 @@ if (!callersFile || process.argv.includes("--help")) {
     console.log("Dry run only. Add --apply to import these callers.");
   } else {
     const now = new Date().toISOString();
-    database.exec("BEGIN IMMEDIATE");
     try {
-      const insert = database.prepare(`
-        INSERT INTO user_phone_numbers
-          (id, user_id, phone_e164, label, notes, enabled, can_open, can_hold_open, created_at, updated_at)
-        VALUES (?, ?, ?, 'Mobile', ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(phone_e164) DO UPDATE SET
-          user_id = excluded.user_id,
-          notes = excluded.notes,
-          enabled = excluded.enabled,
-          can_open = excluded.can_open,
-          can_hold_open = excluded.can_hold_open,
-          updated_at = excluded.updated_at
-      `);
-      for (const row of rows) insert.run(randomUUID(), row.userId, row.phone, row.notes, Number(row.enabled), Number(row.canOpen), Number(row.canHoldOpen), now, now);
-      database.exec("COMMIT");
+      database.transaction((tx) => {
+        for (const row of rows) {
+          tx.insert(userPhoneNumbers).values({ id: randomUUID(), userId: row.userId, phoneE164: row.phone, label: "Mobile", notes: row.notes, enabled: row.enabled, canOpen: row.canOpen, canHoldOpen: row.canHoldOpen, createdAt: now, updatedAt: now })
+            .onConflictDoUpdate({ target: userPhoneNumbers.phoneE164, set: { userId: row.userId, notes: row.notes, enabled: row.enabled, canOpen: row.canOpen, canHoldOpen: row.canHoldOpen, updatedAt: now } }).run();
+        }
+      }, { behavior: "immediate" });
       console.log(`Imported ${rows.length} phone ${rows.length === 1 ? "number" : "numbers"}.`);
     } catch (error) {
-      database.exec("ROLLBACK");
       throw error;
     }
   }

@@ -1,8 +1,11 @@
 import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { APIError } from "better-auth/api";
 import { admin, organization, username } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
+import { and, eq, ne } from "drizzle-orm";
 import { database } from "./database.ts";
+import * as schema from "./schema.ts";
 
 export const BOOTSTRAP_ADMIN_EMAIL = "oren@teich.net";
 export const BOOTSTRAP_ADMIN_USERNAME = "oren";
@@ -16,20 +19,17 @@ type CreatedUser = {
 
 let addBootstrapOwner: (user: CreatedUser) => Promise<void> = async () => undefined;
 
-function hasGateyRecords(householdId: string) {
-  const row = database.prepare(`
-    SELECT EXISTS(
-      SELECT 1 FROM credentials WHERE household_id = ?
-      UNION ALL SELECT 1 FROM visitor_pins WHERE household_id = ?
-      UNION ALL SELECT 1 FROM person_pins WHERE household_id = ?
-      UNION ALL SELECT 1 FROM visitor_households WHERE household_id = ?
-    ) AS hasRecords
-  `).get(householdId, householdId, householdId, householdId) as { hasRecords: number };
-  return Boolean(row.hasRecords);
+function householdHasGateyRecords(householdId: string) {
+  return Boolean(
+    database.select({ id: schema.credentials.id }).from(schema.credentials).where(eq(schema.credentials.householdId, householdId)).limit(1).get()
+    ?? database.select({ id: schema.visitorPins.controllerVisitorId }).from(schema.visitorPins).where(eq(schema.visitorPins.householdId, householdId)).limit(1).get()
+    ?? database.select({ id: schema.personPins.controllerUserId }).from(schema.personPins).where(eq(schema.personPins.householdId, householdId)).limit(1).get()
+    ?? database.select({ id: schema.visitorHouseholds.controllerVisitorId }).from(schema.visitorHouseholds).where(eq(schema.visitorHouseholds.householdId, householdId)).limit(1).get(),
+  );
 }
 
 export const auth = betterAuth({
-  database,
+  database: drizzleAdapter(database, { provider: "sqlite", schema, transaction: true }),
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
@@ -64,9 +64,10 @@ export const auth = betterAuth({
           if (organization.id === BOOTSTRAP_HOUSEHOLD_ID) {
             throw APIError.fromStatus("BAD_REQUEST", { message: "The initial Gatey household cannot be deleted." });
           }
-          const otherMember = database.prepare("SELECT 1 FROM member WHERE organizationId = ? AND userId != ? LIMIT 1").get(organization.id, user.id);
+          const otherMember = database.select({ id: schema.member.id }).from(schema.member)
+            .where(and(eq(schema.member.organizationId, organization.id), ne(schema.member.userId, user.id))).limit(1).get();
           if (otherMember) throw APIError.fromStatus("BAD_REQUEST", { message: "Remove the household's residents before deleting it." });
-          if (hasGateyRecords(organization.id)) {
+          if (householdHasGateyRecords(organization.id)) {
             throw APIError.fromStatus("BAD_REQUEST", { message: "This household has Gatey records and cannot be deleted." });
           }
         },
@@ -81,7 +82,8 @@ addBootstrapOwner = async (user) => {
   const isBootstrapAdmin = user.email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL || user.username?.toLowerCase() === BOOTSTRAP_ADMIN_USERNAME;
   if (!isBootstrapAdmin) return;
 
-  const existing = database.prepare("SELECT 1 FROM member WHERE userId = ? AND organizationId = ?").get(user.id, BOOTSTRAP_HOUSEHOLD_ID);
+  const existing = database.select({ id: schema.member.id }).from(schema.member)
+    .where(and(eq(schema.member.userId, user.id), eq(schema.member.organizationId, BOOTSTRAP_HOUSEHOLD_ID))).get();
   if (existing) return;
 
   await auth.api.addMember({

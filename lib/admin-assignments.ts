@@ -1,7 +1,9 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { eq, sql } from "drizzle-orm";
 import { database } from "./database.ts";
+import { credentials, member, organization, personPins, session, unifiPersonLinks, user, visitorHouseholds, visitorPins } from "./schema.ts";
 
 export type PersonLink = {
   controllerUserId: string;
@@ -27,52 +29,36 @@ export type VisitorHousehold = {
   householdName: string;
 };
 
-type PersonLinkRow = {
-  controllerUserId: string;
-  userId: string;
-  accountName: string;
-  email: string;
-  username: string | null;
-  householdId: string | null;
-  householdName: string | null;
-};
-
 export function listPersonLinks(): Map<string, PersonLink> {
-  const rows = database.prepare(`
-    SELECT
-      unifi_person_links.controller_user_id AS controllerUserId,
-      user.id AS userId,
-      user.name AS accountName,
-      user.email,
-      user.username,
-      organization.id AS householdId,
-      organization.name AS householdName
-    FROM unifi_person_links
-    INNER JOIN user ON user.id = unifi_person_links.user_id
-    LEFT JOIN member ON member.userId = user.id
-    LEFT JOIN organization ON organization.id = member.organizationId
-    ORDER BY user.name COLLATE NOCASE
-  `).all() as PersonLinkRow[];
+  const rows = database.select({
+    controllerUserId: unifiPersonLinks.controllerUserId,
+    userId: user.id,
+    accountName: user.name,
+    email: user.email,
+    username: user.username,
+    householdId: organization.id,
+    householdName: organization.name,
+  }).from(unifiPersonLinks).innerJoin(user, eq(user.id, unifiPersonLinks.userId))
+    .leftJoin(member, eq(member.userId, user.id))
+    .leftJoin(organization, eq(organization.id, member.organizationId))
+    .orderBy(sql`${user.name} collate nocase`).all();
 
   return new Map(rows.map((row) => [row.controllerUserId, row]));
 }
 
 export function listAssignableAccounts(): AssignableAccount[] {
-  const rows = database.prepare(`
-    SELECT
-      user.id,
-      user.name,
-      user.email,
-      user.username,
-      organization.id AS householdId,
-      organization.name AS householdName
-    FROM user
-    LEFT JOIN unifi_person_links ON unifi_person_links.user_id = user.id
-    LEFT JOIN member ON member.userId = user.id
-    LEFT JOIN organization ON organization.id = member.organizationId
-    WHERE unifi_person_links.user_id IS NULL
-    ORDER BY user.name COLLATE NOCASE, user.email COLLATE NOCASE
-  `).all() as AssignableAccount[];
+  const rows = database.select({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    username: user.username,
+    householdId: organization.id,
+    householdName: organization.name,
+  }).from(user).leftJoin(unifiPersonLinks, eq(unifiPersonLinks.userId, user.id))
+    .leftJoin(member, eq(member.userId, user.id))
+    .leftJoin(organization, eq(organization.id, member.organizationId))
+    .where(sql`${unifiPersonLinks.userId} is null`)
+    .orderBy(sql`${user.name} collate nocase`, sql`${user.email} collate nocase`).all();
 
   return rows.map((row) => ({
     id: row.id,
@@ -85,25 +71,19 @@ export function listAssignableAccounts(): AssignableAccount[] {
 }
 
 export function linkUnifiPerson(controllerUserId: string, userId: string) {
-  database.prepare(`
-    INSERT INTO unifi_person_links (controller_user_id, user_id, linked_at)
-    VALUES (?, ?, ?)
-  `).run(controllerUserId, userId, new Date().toISOString());
+  database.insert(unifiPersonLinks).values({ controllerUserId, userId, linkedAt: new Date().toISOString() }).run();
 }
 
 export function assignPersonRecords(controllerUserId: string, householdId: string) {
-  database.prepare("UPDATE person_pins SET household_id = ? WHERE controller_user_id = ?").run(householdId, controllerUserId);
+  database.update(personPins).set({ householdId }).where(eq(personPins.controllerUserId, controllerUserId)).run();
 }
 
 function personHouseholdMove(userId: string, householdId: string) {
-  const target = database.prepare("SELECT id FROM organization WHERE id = ?").get(householdId);
+  const target = database.select({ id: organization.id }).from(organization).where(eq(organization.id, householdId)).get();
   if (!target) throw new Error("Household not found.");
 
-  const memberships = database.prepare(`
-    SELECT id, organizationId, role
-    FROM member
-    WHERE userId = ?
-  `).all(userId) as Array<{ id: string; organizationId: string; role: string }>;
+  const memberships = database.select({ id: member.id, organizationId: member.organizationId, role: member.role })
+    .from(member).where(eq(member.userId, userId)).all();
   if (memberships.length > 1) throw new Error("This account belongs to more than one household. Resolve its memberships before moving it.");
   const current = memberships[0];
   if (current?.organizationId === householdId) return { current, changeRequired: false };
@@ -119,27 +99,19 @@ export function reassignPersonHousehold(controllerUserId: string, userId: string
   const { current, changeRequired } = personHouseholdMove(userId, householdId);
   if (!changeRequired) return;
 
-  database.exec("BEGIN IMMEDIATE");
-  try {
+  database.transaction((tx) => {
     if (current) {
-      database.prepare("UPDATE member SET organizationId = ? WHERE id = ?").run(householdId, current.id);
+      tx.update(member).set({ organizationId: householdId }).where(eq(member.id, current.id)).run();
     } else {
-      database.prepare(`
-        INSERT INTO member (id, organizationId, userId, role, createdAt)
-        VALUES (?, ?, ?, 'member', ?)
-      `).run(randomUUID(), householdId, userId, new Date().toISOString());
+      tx.insert(member).values({ id: randomUUID(), organizationId: householdId, userId, role: "member", createdAt: new Date() }).run();
     }
-    database.prepare("UPDATE person_pins SET household_id = ? WHERE controller_user_id = ?").run(householdId, controllerUserId);
-    database.prepare("UPDATE session SET activeOrganizationId = ? WHERE userId = ?").run(householdId, userId);
-    database.exec("COMMIT");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
+    tx.update(personPins).set({ householdId }).where(eq(personPins.controllerUserId, controllerUserId)).run();
+    tx.update(session).set({ activeOrganizationId: householdId }).where(eq(session.userId, userId)).run();
+  }, { behavior: "immediate" });
 }
 
 export function unlinkUnifiPerson(controllerUserId: string) {
-  database.prepare("DELETE FROM unifi_person_links WHERE controller_user_id = ?").run(controllerUserId);
+  database.delete(unifiPersonLinks).where(eq(unifiPersonLinks.controllerUserId, controllerUserId)).run();
 }
 
 export function getPersonLink(controllerUserId: string): PersonLink | null {
@@ -147,14 +119,8 @@ export function getPersonLink(controllerUserId: string): PersonLink | null {
 }
 
 export function listVisitorHouseholds(): Map<string, VisitorHousehold> {
-  const rows = database.prepare(`
-    SELECT
-      visitor_households.controller_visitor_id AS controllerVisitorId,
-      organization.id AS householdId,
-      organization.name AS householdName
-    FROM visitor_households
-    INNER JOIN organization ON organization.id = visitor_households.household_id
-  `).all() as Array<VisitorHousehold & { controllerVisitorId: string }>;
+  const rows = database.select({ controllerVisitorId: visitorHouseholds.controllerVisitorId, householdId: organization.id, householdName: organization.name })
+    .from(visitorHouseholds).innerJoin(organization, eq(organization.id, visitorHouseholds.householdId)).all();
   return new Map(rows.map((row) => [row.controllerVisitorId, row]));
 }
 
@@ -164,20 +130,10 @@ export function getVisitorHousehold(controllerVisitorId: string): VisitorHouseho
 
 export function assignVisitorToHousehold(controllerVisitorId: string, householdId: string) {
   const assignedAt = new Date().toISOString();
-  database.exec("BEGIN IMMEDIATE");
-  try {
-    database.prepare(`
-      INSERT INTO visitor_households (controller_visitor_id, household_id, assigned_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(controller_visitor_id) DO UPDATE SET
-        household_id = excluded.household_id,
-        assigned_at = excluded.assigned_at
-    `).run(controllerVisitorId, householdId, assignedAt);
-    database.prepare("UPDATE credentials SET household_id = ? WHERE controller_visitor_id = ?").run(householdId, controllerVisitorId);
-    database.prepare("UPDATE visitor_pins SET household_id = ? WHERE controller_visitor_id = ?").run(householdId, controllerVisitorId);
-    database.exec("COMMIT");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
+  database.transaction((tx) => {
+    tx.insert(visitorHouseholds).values({ controllerVisitorId, householdId, assignedAt })
+      .onConflictDoUpdate({ target: visitorHouseholds.controllerVisitorId, set: { householdId, assignedAt } }).run();
+    tx.update(credentials).set({ householdId }).where(eq(credentials.controllerVisitorId, controllerVisitorId)).run();
+    tx.update(visitorPins).set({ householdId }).where(eq(visitorPins.controllerVisitorId, controllerVisitorId)).run();
+  }, { behavior: "immediate" });
 }

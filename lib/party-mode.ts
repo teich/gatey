@@ -1,23 +1,14 @@
 import "server-only";
 
+import { eq } from "drizzle-orm";
 import { recordAuditEvent } from "@/lib/audit-log";
 import { database } from "@/lib/database";
+import { partyMode } from "@/lib/schema";
 import { endGateHoldOpen, holdGateOpenUntil } from "@/lib/unifi-access";
 
 type PartyState = "scheduled" | "starting" | "active" | "failed" | "ended" | "cancelled";
 
-type PartyRow = {
-  id: 1;
-  state: PartyState;
-  starts_at: string;
-  ends_at: string;
-  household_id: string;
-  household_name: string;
-  actor_user_id: string;
-  actor_name: string;
-  created_at: string;
-  updated_at: string;
-};
+type PartyRow = typeof partyMode.$inferSelect;
 
 export type PartyMode = {
   state: "scheduled" | "active";
@@ -36,26 +27,22 @@ const globalForPartyMode = globalThis as unknown as {
 };
 
 function currentRow(): PartyRow | undefined {
-  return database.prepare(`
-    SELECT id, state, starts_at, ends_at, household_id, household_name, actor_user_id, actor_name, created_at, updated_at
-    FROM party_mode
-    WHERE id = 1
-  `).get() as PartyRow | undefined;
+  return database.select().from(partyMode).where(eq(partyMode.id, 1)).get();
 }
 
 function asPartyMode(row: PartyRow | undefined): PartyMode | null {
   if (!row || (row.state !== "scheduled" && row.state !== "active")) return null;
   return {
     state: row.state,
-    startsAt: row.starts_at,
-    endsAt: row.ends_at,
-    householdId: row.household_id,
-    householdName: row.household_name,
+    startsAt: row.startsAt,
+    endsAt: row.endsAt,
+    householdId: row.householdId,
+    householdName: row.householdName,
   };
 }
 
 function updatePartyState(state: PartyState) {
-  database.prepare("UPDATE party_mode SET state = ?, updated_at = ? WHERE id = 1").run(state, new Date().toISOString());
+  database.update(partyMode).set({ state, updatedAt: new Date().toISOString() }).where(eq(partyMode.id, 1)).run();
 }
 
 function isToday(date: Date, now: Date) {
@@ -66,51 +53,47 @@ function armPartyTimer(row = currentRow()) {
   if (globalForPartyMode.gateyPartyTimer) clearTimeout(globalForPartyMode.gateyPartyTimer);
   if (!row || !["scheduled", "active"].includes(row.state)) return;
 
-  const target = row.state === "scheduled" ? new Date(row.starts_at).getTime() : new Date(row.ends_at).getTime();
+  const target = row.state === "scheduled" ? new Date(row.startsAt).getTime() : new Date(row.endsAt).getTime();
   const delay = Math.max(0, Math.min(target - Date.now(), 2_147_000_000));
   globalForPartyMode.gateyPartyTimer = setTimeout(() => void reconcilePartyMode(), delay);
 }
 
 async function startDuePartyMode(row: PartyRow) {
-  database.exec("BEGIN IMMEDIATE");
-  try {
+  const claimed = database.transaction(() => {
     const current = currentRow();
-    if (!current || current.state !== "scheduled" || current.updated_at !== row.updated_at) {
-      database.exec("COMMIT");
-      return;
+    if (!current || current.state !== "scheduled" || current.updatedAt !== row.updatedAt) {
+      return false;
     }
     updatePartyState("starting");
-    database.exec("COMMIT");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
+    return true;
+  }, { behavior: "immediate" });
+  if (!claimed) return;
 
   try {
-    await holdGateOpenUntil(new Date(row.ends_at));
+    await holdGateOpenUntil(new Date(row.endsAt));
     updatePartyState("active");
     try {
       recordAuditEvent({
-        actorUserId: row.actor_user_id,
-        actorName: row.actor_name,
-        householdId: row.household_id,
-        householdName: row.household_name,
+        actorUserId: row.actorUserId,
+        actorName: row.actorName,
+        householdId: row.householdId,
+        householdName: row.householdName,
         action: "party.started",
         outcome: "succeeded",
-        details: { startsAt: row.starts_at, endsAt: row.ends_at, source: "scheduler" },
+        details: { startsAt: row.startsAt, endsAt: row.endsAt, source: "scheduler" },
       });
     } catch { /* The controller already accepted the hold; keep its true state. */ }
   } catch {
     updatePartyState("failed");
     try {
       recordAuditEvent({
-        actorUserId: row.actor_user_id,
-        actorName: row.actor_name,
-        householdId: row.household_id,
-        householdName: row.household_name,
+        actorUserId: row.actorUserId,
+        actorName: row.actorName,
+        householdId: row.householdId,
+        householdName: row.householdName,
         action: "party.started",
         outcome: "failed",
-        details: { startsAt: row.starts_at, endsAt: row.ends_at, source: "scheduler" },
+        details: { startsAt: row.startsAt, endsAt: row.endsAt, source: "scheduler" },
       });
     } catch { /* Preserve the failed controller result if local logging is unavailable. */ }
   }
@@ -120,21 +103,21 @@ export async function reconcilePartyMode(): Promise<PartyMode | null> {
   let row = currentRow();
   if (!row) return null;
   const now = Date.now();
-  const startsAt = new Date(row.starts_at).getTime();
-  const endsAt = new Date(row.ends_at).getTime();
+  const startsAt = new Date(row.startsAt).getTime();
+  const endsAt = new Date(row.endsAt).getTime();
 
   if (endsAt <= now && ["scheduled", "starting", "active"].includes(row.state)) {
     updatePartyState("ended");
     if (row.state === "active") {
       try {
         recordAuditEvent({
-          actorUserId: row.actor_user_id,
-          actorName: row.actor_name,
-          householdId: row.household_id,
-          householdName: row.household_name,
+          actorUserId: row.actorUserId,
+          actorName: row.actorName,
+          householdId: row.householdId,
+          householdName: row.householdName,
           action: "party.ended",
           outcome: "succeeded",
-          details: { endsAt: row.ends_at, source: "controller schedule" },
+          details: { endsAt: row.endsAt, source: "controller schedule" },
         });
       } catch { /* The controller's automatic close remains authoritative. */ }
     }
@@ -165,32 +148,15 @@ export async function schedulePartyMode(input: {
   if (input.startsAt.getTime() < now.getTime() - 30_000) throw new PartyModeValidationError("Choose a start time that has not passed.");
   if (input.endsAt <= input.startsAt) throw new PartyModeValidationError("The closing time must be after the starting time.");
 
-  database.exec("BEGIN IMMEDIATE");
-  try {
+  database.transaction((tx) => {
     const existing = currentRow();
-    if (existing && ["scheduled", "starting", "active"].includes(existing.state) && new Date(existing.ends_at) > now) {
-      throw new PartyModeConflictError(`Party mode is already planned by ${existing.household_name} until ${new Date(existing.ends_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`);
+    if (existing && ["scheduled", "starting", "active"].includes(existing.state) && new Date(existing.endsAt) > now) {
+      throw new PartyModeConflictError(`Party mode is already planned by ${existing.householdName} until ${new Date(existing.endsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`);
     }
     const timestamp = now.toISOString();
-    database.prepare(`
-      INSERT INTO party_mode (id, state, starts_at, ends_at, household_id, household_name, actor_user_id, actor_name, created_at, updated_at)
-      VALUES (1, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        state = excluded.state,
-        starts_at = excluded.starts_at,
-        ends_at = excluded.ends_at,
-        household_id = excluded.household_id,
-        household_name = excluded.household_name,
-        actor_user_id = excluded.actor_user_id,
-        actor_name = excluded.actor_name,
-        created_at = excluded.created_at,
-        updated_at = excluded.updated_at
-    `).run(input.startsAt.toISOString(), input.endsAt.toISOString(), input.householdId, input.householdName, input.actorUserId, input.actorName.slice(0, 160), timestamp, timestamp);
-    database.exec("COMMIT");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
+    const values = { id: 1, state: "scheduled" as const, startsAt: input.startsAt.toISOString(), endsAt: input.endsAt.toISOString(), householdId: input.householdId, householdName: input.householdName, actorUserId: input.actorUserId, actorName: input.actorName.slice(0, 160), createdAt: timestamp, updatedAt: timestamp };
+    tx.insert(partyMode).values(values).onConflictDoUpdate({ target: partyMode.id, set: values }).run();
+  }, { behavior: "immediate" });
 
   const party = await reconcilePartyMode();
   if (!party && input.startsAt <= now) throw new Error("UniFi could not hold the gate open until that time. Try an earlier closing time.");
@@ -218,20 +184,8 @@ export async function startPhoneHold(input: {
   }
 
   const timestamp = now.toISOString();
-  database.prepare(`
-    INSERT INTO party_mode (id, state, starts_at, ends_at, household_id, household_name, actor_user_id, actor_name, created_at, updated_at)
-    VALUES (1, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      state = excluded.state,
-      starts_at = excluded.starts_at,
-      ends_at = excluded.ends_at,
-      household_id = excluded.household_id,
-      household_name = excluded.household_name,
-      actor_user_id = excluded.actor_user_id,
-      actor_name = excluded.actor_name,
-      created_at = excluded.created_at,
-      updated_at = excluded.updated_at
-  `).run(timestamp, input.endsAt.toISOString(), input.householdId, input.householdName, input.actorUserId, input.actorName.slice(0, 160), timestamp, timestamp);
+  const values = { id: 1, state: "starting" as const, startsAt: timestamp, endsAt: input.endsAt.toISOString(), householdId: input.householdId, householdName: input.householdName, actorUserId: input.actorUserId, actorName: input.actorName.slice(0, 160), createdAt: timestamp, updatedAt: timestamp };
+  database.insert(partyMode).values(values).onConflictDoUpdate({ target: partyMode.id, set: values }).run();
 
   try {
     await holdGateOpenUntil(input.endsAt);

@@ -1,7 +1,9 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { database } from "@/lib/database";
+import { gateCodes, visitorHouseholds } from "@/lib/schema";
 
 export type GateCodeKind = "home" | "ongoing" | "temporary";
 export type GateCodeState = "active" | "disabled";
@@ -19,67 +21,45 @@ export type GateCode = {
   disabledAt?: string;
 };
 
-type GateCodeRow = {
-  id: string;
-  label: string;
-  pin: string;
-  kind: GateCodeKind;
-  starts_at: string;
-  ends_at: string | null;
-  controller_ends_at: string;
-  controller_visitor_id: string;
-  state: GateCodeState;
-  disabled_at: string | null;
-};
-
-function mapGateCode(row: GateCodeRow): GateCode {
+function mapGateCode(row: typeof gateCodes.$inferSelect): GateCode {
   return {
     id: row.id,
     label: row.label,
     pin: row.pin,
     kind: row.kind,
-    startsAt: row.starts_at,
-    ...(row.ends_at ? { endsAt: row.ends_at } : {}),
-    controllerEndsAt: row.controller_ends_at,
-    controllerVisitorId: row.controller_visitor_id,
+    startsAt: row.startsAt,
+    ...(row.endsAt ? { endsAt: row.endsAt } : {}),
+    controllerEndsAt: row.controllerEndsAt,
+    controllerVisitorId: row.controllerVisitorId,
     state: row.state,
-    ...(row.disabled_at ? { disabledAt: row.disabled_at } : {}),
+    ...(row.disabledAt ? { disabledAt: row.disabledAt } : {}),
   };
 }
 
 export function listGateCodes(householdId: string): GateCode[] {
-  const rows = database.prepare(`
-    SELECT id, label, pin, kind, starts_at, ends_at, controller_ends_at,
-      controller_visitor_id, state, disabled_at
-    FROM gate_codes
-    WHERE household_id = ?
-    ORDER BY CASE kind WHEN 'home' THEN 0 WHEN 'ongoing' THEN 1 ELSE 2 END, label COLLATE NOCASE
-  `).all(householdId) as GateCodeRow[];
+  const rows = database.select().from(gateCodes).where(eq(gateCodes.householdId, householdId))
+    .orderBy(sql`case ${gateCodes.kind} when 'home' then 0 when 'ongoing' then 1 else 2 end`, sql`${gateCodes.label} collate nocase`).all();
   return rows.map(mapGateCode);
 }
 
 export function managedGateyVisitorIds(): Set<string> {
-  const rows = database.prepare("SELECT controller_visitor_id FROM gate_codes WHERE state = 'active'").all() as Array<{ controller_visitor_id: string }>;
-  return new Set(rows.map((row) => row.controller_visitor_id));
+  const rows = database.select({ controllerVisitorId: gateCodes.controllerVisitorId }).from(gateCodes).where(eq(gateCodes.state, "active")).all();
+  return new Set(rows.map((row) => row.controllerVisitorId));
 }
 
 export function findGateCode(householdId: string, id: string): GateCode | undefined {
-  const row = database.prepare(`
-    SELECT id, label, pin, kind, starts_at, ends_at, controller_ends_at,
-      controller_visitor_id, state, disabled_at
-    FROM gate_codes WHERE household_id = ? AND id = ?
-  `).get(householdId, id) as GateCodeRow | undefined;
+  const row = database.select().from(gateCodes).where(and(eq(gateCodes.householdId, householdId), eq(gateCodes.id, id))).get();
   return row ? mapGateCode(row) : undefined;
 }
 
 export function hasGateCodePin(pin: string, exceptId?: string): boolean {
-  const row = database.prepare("SELECT 1 FROM gate_codes WHERE pin = ? AND state = 'active' AND id != ? LIMIT 1").get(pin, exceptId || "") as object | undefined;
-  return Boolean(row);
+  return Boolean(database.select({ id: gateCodes.id }).from(gateCodes)
+    .where(and(eq(gateCodes.pin, pin), eq(gateCodes.state, "active"), ne(gateCodes.id, exceptId || ""))).limit(1).get());
 }
 
 export function hasHomeCode(householdId: string, exceptId?: string): boolean {
-  const row = database.prepare("SELECT 1 FROM gate_codes WHERE household_id = ? AND kind = 'home' AND state = 'active' AND id != ? LIMIT 1").get(householdId, exceptId || "") as object | undefined;
-  return Boolean(row);
+  return Boolean(database.select({ id: gateCodes.id }).from(gateCodes)
+    .where(and(eq(gateCodes.householdId, householdId), eq(gateCodes.kind, "home"), eq(gateCodes.state, "active"), ne(gateCodes.id, exceptId || ""))).limit(1).get());
 }
 
 export function saveGateCode(input: {
@@ -95,34 +75,38 @@ export function saveGateCode(input: {
 }) {
   const id = input.id || randomUUID();
   const now = new Date().toISOString();
-  database.exec("BEGIN IMMEDIATE");
-  try {
-  database.prepare(`
-    INSERT INTO gate_codes (
-      id, household_id, label, pin, kind, starts_at, ends_at, controller_ends_at,
-      controller_visitor_id, state, disabled_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NULL, ?, ?)
-  `).run(id, input.householdId, input.label, input.pin, input.kind, input.startsAt, input.endsAt ?? null, input.controllerEndsAt, input.controllerVisitorId, now, now);
-  database.prepare(`
-    INSERT INTO visitor_households (controller_visitor_id, household_id, assigned_at)
-    VALUES (?, ?, ?)
-    ON CONFLICT(controller_visitor_id) DO UPDATE SET household_id = excluded.household_id, assigned_at = excluded.assigned_at
-  `).run(input.controllerVisitorId, input.householdId, now);
-  database.exec("COMMIT");
+  database.transaction((tx) => {
+    tx.insert(gateCodes).values({
+      id,
+      householdId: input.householdId,
+      label: input.label,
+      pin: input.pin,
+      kind: input.kind,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt ?? null,
+      controllerEndsAt: input.controllerEndsAt,
+      controllerVisitorId: input.controllerVisitorId,
+      state: "active",
+      disabledAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    tx.insert(visitorHouseholds).values({ controllerVisitorId: input.controllerVisitorId, householdId: input.householdId, assignedAt: now })
+      .onConflictDoUpdate({ target: visitorHouseholds.controllerVisitorId, set: { householdId: input.householdId, assignedAt: now } }).run();
+  }, { behavior: "immediate" });
   return id;
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
 }
 
 export function updateGateCode(input: { householdId: string; id: string; label?: string; pin?: string }) {
   const existing = findGateCode(input.householdId, input.id);
   if (!existing) return undefined;
-  database.prepare("UPDATE gate_codes SET label = ?, pin = ?, updated_at = ? WHERE id = ? AND household_id = ?").run(input.label ?? existing.label, input.pin ?? existing.pin, new Date().toISOString(), input.id, input.householdId);
+  database.update(gateCodes).set({ label: input.label ?? existing.label, pin: input.pin ?? existing.pin, updatedAt: new Date().toISOString() })
+    .where(and(eq(gateCodes.id, input.id), eq(gateCodes.householdId, input.householdId))).run();
   return findGateCode(input.householdId, input.id);
 }
 
 export function disableGateCode(householdId: string, id: string) {
-  database.prepare("UPDATE gate_codes SET state = 'disabled', disabled_at = ?, updated_at = ? WHERE id = ? AND household_id = ?").run(new Date().toISOString(), new Date().toISOString(), id, householdId);
+  const now = new Date().toISOString();
+  database.update(gateCodes).set({ state: "disabled", disabledAt: now, updatedAt: now })
+    .where(and(eq(gateCodes.id, id), eq(gateCodes.householdId, householdId))).run();
 }

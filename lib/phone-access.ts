@@ -1,7 +1,9 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { database } from "@/lib/database";
+import { member, organization, user, userPhoneNumbers } from "@/lib/schema";
 
 export type PhoneAccess = {
   id: string;
@@ -20,17 +22,6 @@ export type AuthorizedPhoneCaller = PhoneAccess & {
   householdName: string;
 };
 
-type PhoneRow = {
-  id: string;
-  userId: string;
-  phoneE164: string;
-  label: string;
-  notes: string;
-  enabled: number;
-  canOpen: number;
-  canHoldOpen: number;
-};
-
 export function normalizeE164(value: string): string {
   const compact = value.trim().replace(/[\s().-]/g, "");
   if (!/^\+[1-9]\d{1,14}$/.test(compact)) {
@@ -39,79 +30,59 @@ export function normalizeE164(value: string): string {
   return compact;
 }
 
-function mapPhone(row: PhoneRow): PhoneAccess {
-  return {
-    id: row.id,
-    userId: row.userId,
-    phoneE164: row.phoneE164,
-    label: row.label,
-    notes: row.notes,
-    enabled: Boolean(row.enabled),
-    canOpen: Boolean(row.canOpen),
-    canHoldOpen: Boolean(row.canHoldOpen),
-  };
-}
-
 export function listUserPhoneNumbers(userId: string): PhoneAccess[] {
-  const rows = database.prepare(`
-    SELECT id, user_id AS userId, phone_e164 AS phoneE164, label, notes,
-      enabled, can_open AS canOpen, can_hold_open AS canHoldOpen
-    FROM user_phone_numbers
-    WHERE user_id = ?
-    ORDER BY enabled DESC, label COLLATE NOCASE, phone_e164
-  `).all(userId) as PhoneRow[];
-  return rows.map(mapPhone);
+  return database.select({
+    id: userPhoneNumbers.id,
+    userId: userPhoneNumbers.userId,
+    phoneE164: userPhoneNumbers.phoneE164,
+    label: userPhoneNumbers.label,
+    notes: userPhoneNumbers.notes,
+    enabled: userPhoneNumbers.enabled,
+    canOpen: userPhoneNumbers.canOpen,
+    canHoldOpen: userPhoneNumbers.canHoldOpen,
+  }).from(userPhoneNumbers).where(eq(userPhoneNumbers.userId, userId))
+    .orderBy(desc(userPhoneNumbers.enabled), sql`${userPhoneNumbers.label} collate nocase`, userPhoneNumbers.phoneE164).all();
 }
 
 export function findAuthorizedPhoneCaller(value: string): AuthorizedPhoneCaller | null {
   let phoneE164: string;
   try { phoneE164 = normalizeE164(value); } catch { return null; }
 
-  const row = database.prepare(`
-    SELECT
-      user_phone_numbers.id,
-      user_phone_numbers.user_id AS userId,
-      user_phone_numbers.phone_e164 AS phoneE164,
-      user_phone_numbers.label,
-      user_phone_numbers.notes,
-      user_phone_numbers.enabled,
-      user_phone_numbers.can_open AS canOpen,
-      user_phone_numbers.can_hold_open AS canHoldOpen,
-      user.name AS userName,
-      organization.id AS householdId,
-      organization.name AS householdName
-    FROM user_phone_numbers
-    INNER JOIN user ON user.id = user_phone_numbers.user_id
-    INNER JOIN member ON member.userId = user.id
-    INNER JOIN organization ON organization.id = member.organizationId
-    WHERE user_phone_numbers.phone_e164 = ? AND user_phone_numbers.enabled = 1
-    LIMIT 1
-  `).get(phoneE164) as (PhoneRow & { userName: string; householdId: string; householdName: string }) | undefined;
-  return row ? { ...mapPhone(row), userName: row.userName, householdId: row.householdId, householdName: row.householdName } : null;
+  return database.select({
+    id: userPhoneNumbers.id,
+    userId: userPhoneNumbers.userId,
+    phoneE164: userPhoneNumbers.phoneE164,
+    label: userPhoneNumbers.label,
+    notes: userPhoneNumbers.notes,
+    enabled: userPhoneNumbers.enabled,
+    canOpen: userPhoneNumbers.canOpen,
+    canHoldOpen: userPhoneNumbers.canHoldOpen,
+    userName: user.name,
+    householdId: organization.id,
+    householdName: organization.name,
+  }).from(userPhoneNumbers)
+    .innerJoin(user, eq(user.id, userPhoneNumbers.userId))
+    .innerJoin(member, eq(member.userId, user.id))
+    .innerJoin(organization, eq(organization.id, member.organizationId))
+    .where(and(eq(userPhoneNumbers.phoneE164, phoneE164), eq(userPhoneNumbers.enabled, true)))
+    .limit(1).get() ?? null;
 }
 
 export function createUserPhoneNumber(userId: string, input: Omit<PhoneAccess, "id" | "userId">): PhoneAccess {
   const id = randomUUID();
   const now = new Date().toISOString();
   const phoneE164 = normalizeE164(input.phoneE164);
-  database.prepare(`
-    INSERT INTO user_phone_numbers
-      (id, user_id, phone_e164, label, notes, enabled, can_open, can_hold_open, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, userId, phoneE164, input.label, input.notes, Number(input.enabled), Number(input.canOpen), Number(input.canHoldOpen), now, now);
+  database.insert(userPhoneNumbers).values({ id, userId, phoneE164, label: input.label, notes: input.notes, enabled: input.enabled, canOpen: input.canOpen, canHoldOpen: input.canHoldOpen, createdAt: now, updatedAt: now }).run();
   return { id, userId, ...input, phoneE164 };
 }
 
 export function updateUserPhoneNumber(userId: string, id: string, input: Omit<PhoneAccess, "id" | "userId">): PhoneAccess | null {
   const phoneE164 = normalizeE164(input.phoneE164);
-  const result = database.prepare(`
-    UPDATE user_phone_numbers
-    SET phone_e164 = ?, label = ?, notes = ?, enabled = ?, can_open = ?, can_hold_open = ?, updated_at = ?
-    WHERE id = ? AND user_id = ?
-  `).run(phoneE164, input.label, input.notes, Number(input.enabled), Number(input.canOpen), Number(input.canHoldOpen), new Date().toISOString(), id, userId);
+  const result = database.update(userPhoneNumbers).set({ phoneE164, label: input.label, notes: input.notes, enabled: input.enabled, canOpen: input.canOpen, canHoldOpen: input.canHoldOpen, updatedAt: new Date().toISOString() })
+    .where(and(eq(userPhoneNumbers.id, id), eq(userPhoneNumbers.userId, userId))).run();
   return result.changes ? { id, userId, ...input, phoneE164 } : null;
 }
 
 export function deleteUserPhoneNumber(userId: string, id: string): boolean {
-  return Boolean(database.prepare("DELETE FROM user_phone_numbers WHERE id = ? AND user_id = ?").run(id, userId).changes);
+  return Boolean(database.delete(userPhoneNumbers).where(and(eq(userPhoneNumbers.id, id), eq(userPhoneNumbers.userId, userId))).run().changes);
 }
