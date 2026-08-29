@@ -100,36 +100,6 @@ The resident experience is the product. The admin interface can be denser.
 - Complex recurring visitor schedules.
 - A redesign of the existing phone bridge or its dashboard.
 
-## Non-negotiable feasibility spike
-
-Before building the product UI, prove the installed UniFi Access version can do
-all of the following through a supported API:
-
-1. Create a PIN credential for the gate with a start and end time.
-2. Return a stable identifier for that credential or visitor.
-3. List enough credential metadata to reconcile app state with controller state.
-4. Revoke the credential immediately.
-5. Preserve the expiry and revoke it inside the controller while the app is
-   stopped.
-
-The fifth item is a release gate. Temporary access must not depend solely on a
-Next.js process or systemd timer waking up later to remove a code. If the app is
-offline, the gate controller must still stop accepting the code on time.
-
-Do not ship production behavior against undocumented browser endpoints without
-an explicit decision to accept breakage after UniFi updates.
-
-The spike should produce:
-
-- A small TypeScript script under `spikes/unifi-access/`.
-- Sanitized request and response fixtures.
-- A written capability matrix and known limitations.
-- One end-to-end test code created, used at the reader, expired with the app
-  stopped, and then confirmed invalid.
-
-If supported credential management is impossible, stop and reconsider the
-integration rather than building the rest of the app around a false assumption.
-
 ## UX specification
 
 ### Resident home

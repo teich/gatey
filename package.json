@@ -16,11 +16,8 @@
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "auth:create-admin": "node --env-file-if-exists=.env scripts/bootstrap-admin.mjs",
     "auth:reset-admin-password": "node --env-file-if-exists=.env scripts/bootstrap-admin.mjs",
-    "phones:import": "node --env-file-if-exists=.env scripts/import-phone-callers.mjs",
     "deploy:prod": "bash scripts/deploy-prod.sh",
-    "sync:prod-db": "bash scripts/sync-prod-db.sh",
-    "spike:unifi": "node --env-file-if-exists=.env spikes/unifi-access/probe.mjs",
-    "spike:unifi:visitor": "node --env-file-if-exists=.env spikes/unifi-access/visitor-lifecycle.mjs"
+    "sync:prod-db": "bash scripts/sync-prod-db.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

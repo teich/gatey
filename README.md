@@ -27,15 +27,6 @@ Gatey can answer the existing Twilio gate number directly. Administrators add on
 
 Configure `TWILIO_PUBLIC_BASE_URL`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, and optionally `TWILIO_TTS_VOICE`, then set `GATEY_TWILIO_ENABLED=true`. Twilio should send form-encoded voice webhooks to `POST /twilio/voice`; Gatey validates every `X-Twilio-Signature`. The public base URL must exactly match the origin Twilio calls.
 
-Legacy callers can be previewed and imported from `phone-gate-bridge`:
-
-```bash
-npm run phones:import -- --callers ../phone-gate-bridge/deploy/config/allowed-callers.toml --map ./phone-map.json
-npm run phones:import -- --callers ../phone-gate-bridge/deploy/config/allowed-callers.toml --map ./phone-map.json --apply
-```
-
-The optional mapping file maps E.164 numbers to Gatey account emails. Without it, the importer only accepts an exact, unique caller-name/account-name match. The command is a dry run unless `--apply` is present.
-
 ## Camera snapshots
 
 Gatey deliberately does not send RTSPS addresses to the phone. The server uses its local `ffmpeg` installation to capture one JPEG frame at a time and returns it only through the signed-in, same-origin snapshot route. Add these settings to the environment where Gatey runs:
