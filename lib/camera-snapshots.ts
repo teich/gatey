@@ -12,7 +12,7 @@ type CachedSnapshot = {
 };
 
 const SNAPSHOT_TTL_MS = 3_000;
-const CAPTURE_TIMEOUT_MS = 10_000;
+const CAPTURE_TIMEOUT_MS = 12_000;
 const MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024;
 
 const globalForCameraSnapshots = globalThis as unknown as {
@@ -53,6 +53,10 @@ async function captureSnapshot(camera: CameraName): Promise<CachedSnapshot> {
     "-loglevel", "error",
     "-rtsp_transport", "tcp",
     ...(usesPrivateCertificate() ? ["-tls_verify", "0"] : []),
+    // An HEVC stream can begin on a predicted frame whose references were sent
+    // before ffmpeg connected. Waiting for the next keyframe prevents a valid
+    // but visibly corrupt JPEG from being returned as the snapshot.
+    "-skip_frame", "nokey",
     "-i", url,
     "-frames:v", "1",
     "-an",
@@ -92,13 +96,20 @@ async function captureSnapshot(camera: CameraName): Promise<CachedSnapshot> {
     });
     captureProcess.on("close", (code) => {
       clearTimeout(timeout);
-      if (code === 0 && byteCount > 0) {
+      const image = Buffer.concat(chunks);
+      const isCompleteJpeg = image.length >= 4
+        && image[0] === 0xff
+        && image[1] === 0xd8
+        && image[image.length - 2] === 0xff
+        && image[image.length - 1] === 0xd9;
+      if (code === 0 && isCompleteJpeg) {
         const capturedAt = Date.now();
-        resolve({ image: Buffer.concat(chunks), capturedAt, expiresAt: capturedAt + SNAPSHOT_TTL_MS });
+        resolve({ image, capturedAt, expiresAt: capturedAt + SNAPSHOT_TTL_MS });
         return;
       }
       if (timedOut) reject(new Error("Camera capture timed out."));
       else if (overLimit) reject(new Error("Camera snapshot was too large."));
+      else if (byteCount > 0) reject(new Error("Camera returned an incomplete image."));
       else reject(new Error(stderr ? "Camera capture failed." : "Camera did not return an image."));
     });
   });
@@ -115,6 +126,16 @@ export async function getCameraSnapshot(camera: CameraName) {
     .then((snapshot) => {
       snapshots.set(camera, snapshot);
       return snapshot;
+    })
+    .catch((error: unknown) => {
+      const staleSnapshot = snapshots.get(camera);
+      if (!staleSnapshot) throw error;
+
+      console.warn("Camera capture failed; serving the previous snapshot.", {
+        camera,
+        error: error instanceof Error ? error.message : "Unknown camera capture error.",
+      });
+      return staleSnapshot;
     })
     .finally(() => captures.delete(camera));
   captures.set(camera, capture);
