@@ -49,6 +49,7 @@ npm run dev
 Run the project checks with:
 
 ```bash
+npm test
 npm run lint
 npm run build
 ```
