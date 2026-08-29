@@ -212,6 +212,10 @@ button { -webkit-tap-highlight-color: transparent; }
 .pin-dialog { max-width: 460px; }
 .pin-input { font-family: ui-monospace, monospace; font-size: 22px; letter-spacing: .1em; }
 .pin-dialog-note { margin: 13px 0 0; color: var(--gatey-muted); font-size: 13px; line-height: 1.45; }
+.migrate-visitor-form { display: grid; gap: 14px; margin-top: 20px; }
+.migrate-visitor-form .field-label { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin: 0; font-size: 14px; }
+.migrate-visitor-form .text-input { grid-column: 1 / -1; min-height: 48px; border-radius: 11px; font-size: 16px; font-weight: 400; }
+.migrate-visitor-form .pin-input { font-size: 18px; }
 .pin-dialog-actions { display: grid; gap: 9px; margin-top: 24px; }
 .pin-dialog-actions .text-button { justify-self: center; }
 .pin-dialog-success { margin: 0 0 10px; color: var(--gatey-muted); }
