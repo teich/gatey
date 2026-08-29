@@ -6,16 +6,21 @@ import { Pencil, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { PersonPhoneEditor } from "@/app/admin/people/person-phone-manager";
+import type { PhoneAccess } from "@/lib/phone-access";
 
 type HouseholdOption = { id: string; name: string };
 
-export function PersonEditor({ personId, accountName, email, username, householdId, households }: {
+export function PersonEditor({ personId, userId, accountName, email, username, householdId, households, phones }: {
   personId: string;
+  userId: string;
   accountName: string;
   email: string;
   username: string | null;
   householdId: string | null;
   households: HouseholdOption[];
+  phones: PhoneAccess[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -41,7 +46,6 @@ export function PersonEditor({ personId, accountName, email, username, household
       });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "Could not update this person.");
-      setOpen(false);
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not update this person.");
@@ -50,13 +54,14 @@ export function PersonEditor({ personId, accountName, email, username, household
 
   return <Dialog open={open} onOpenChange={(nextOpen) => nextOpen ? setOpen(true) : close()}>
     <DialogTrigger render={<Button variant="outline" />}><Pencil data-icon="inline-start" />Edit person</DialogTrigger>
-    <DialogContent showCloseButton={!working}>
+    <DialogContent className="sm:max-w-xl" showCloseButton={!working}>
       <DialogHeader>
         <span className="text-xs font-semibold tracking-[.16em] text-muted-foreground uppercase">Gatey account</span>
         <DialogTitle>Edit {accountName}</DialogTitle>
-        <DialogDescription>Update this resident’s Gatey identity or move them to another household. Their phone access, UniFi link, and history will stay attached.</DialogDescription>
+        <DialogDescription>Manage this resident’s account, household, and call-to-open phone numbers in one place.</DialogDescription>
       </DialogHeader>
       <form className="grid gap-5" onSubmit={save}>
+        <div><h3 className="text-sm font-semibold">Account details</h3><p className="text-xs text-muted-foreground">Used for sign-in, household access, and activity attribution.</p></div>
         <div className="grid gap-4">
           <div className="grid gap-1.5"><label className="text-sm font-medium" htmlFor={`person-name-${personId}`}>Name</label><Input id={`person-name-${personId}`} name="name" defaultValue={accountName} autoComplete="name" required className="h-10" /></div>
           <div className="grid gap-1.5"><label className="text-sm font-medium" htmlFor={`person-email-${personId}`}>Email address</label><Input id={`person-email-${personId}`} name="email" type="email" defaultValue={email} autoComplete="email" required className="h-10" /></div>
@@ -64,8 +69,11 @@ export function PersonEditor({ personId, accountName, email, username, household
           {username ? <div className="flex items-center gap-3 rounded-xl border bg-muted/30 p-3"><div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground"><UserRound className="size-4" /></div><div><span className="block text-sm font-medium">Username: {username}</span><span className="block text-xs text-muted-foreground">Usernames are permanent sign-in identifiers.</span></div></div> : null}
         </div>
         {error ? <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive" role="alert">{error}</p> : null}
-        <DialogFooter><Button type="button" variant="outline" onClick={close} disabled={working}>Cancel</Button><Button type="submit" disabled={working}><Pencil data-icon="inline-start" />{working ? "Saving…" : "Save changes"}</Button></DialogFooter>
+        <DialogFooter><Button type="submit" disabled={working}><Pencil data-icon="inline-start" />{working ? "Saving…" : "Save account details"}</Button></DialogFooter>
       </form>
+      <Separator />
+      <PersonPhoneEditor userId={userId} personName={accountName} phones={phones} />
+      <DialogFooter><Button type="button" variant="outline" onClick={close} disabled={working}>Done</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }
