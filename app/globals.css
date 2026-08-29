@@ -1321,12 +1321,41 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .resident-install-card {
+  position: relative;
   grid-template-columns: auto 1fr;
   align-items: start;
   margin-top: 0;
   background: #f9fcf6;
   color: inherit;
   text-decoration: none;
+}
+
+.resident-home-screen-card {
+  padding-right: 48px;
+}
+
+.resident-install-dismiss {
+  display: grid;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--gatey-muted);
+  cursor: pointer;
+}
+
+.resident-install-dismiss:hover {
+  background: rgba(31, 81, 61, .07);
+}
+
+.resident-install-dismiss svg {
+  width: 18px;
 }
 
 .resident-install-card h2,

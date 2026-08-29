@@ -34,6 +34,8 @@ type Screen = "gate" | "codes" | "more" | "create" | "success";
 type GateState = "closed" | "opening" | "open" | "unknown";
 type CameraView = "person" | "road";
 
+const INSTALL_CARD_DISMISSED_KEY = "gatey.install-card-dismissed";
+
 type GuestCode = {
   id: string;
   label: string;
@@ -106,6 +108,17 @@ function formatPhoneNumber(value: string) {
     return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
   }
   return value;
+}
+
+function shouldShowInstallCard() {
+  if (typeof window === "undefined") return false;
+  const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
+  const installed = window.matchMedia("(display-mode: standalone)").matches || navigatorWithStandalone.standalone === true;
+  try {
+    return !installed && localStorage.getItem(INSTALL_CARD_DISMISSED_KEY) !== "true";
+  } catch {
+    return !installed;
+  }
 }
 
 function codeTiming(code: GuestCode, state: CodeState) {
@@ -290,6 +303,7 @@ export function ResidentHome({
   const [codePin, setCodePin] = useState("");
   const [codeError, setCodeError] = useState("");
   const [previewNotice, setPreviewNotice] = useState("");
+  const [showInstallCard, setShowInstallCard] = useState(shouldShowInstallCard);
 
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -359,6 +373,15 @@ export function ResidentHome({
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    function hideAfterInstall() {
+      setShowInstallCard(false);
+    }
+
+    window.addEventListener("appinstalled", hideAfterInstall);
+    return () => window.removeEventListener("appinstalled", hideAfterInstall);
   }, []);
 
   const grouped = useMemo(() => {
@@ -469,6 +492,15 @@ export function ResidentHome({
     setCustomEnd(toLocalInputValue(endOfDay(current)));
     setError("");
     setScreen("create");
+  }
+
+  function dismissInstallCard() {
+    setShowInstallCard(false);
+    try {
+      localStorage.setItem(INSTALL_CARD_DISMISSED_KEY, "true");
+    } catch {
+      // The card still stays dismissed for this page view when storage is unavailable.
+    }
   }
 
   async function createCode(event: FormEvent<HTMLFormElement>) {
@@ -773,7 +805,7 @@ export function ResidentHome({
       {screen === "more" ? <section className="resident-page" aria-labelledby="more-title">
         <div className="resident-page-heading"><p className="resident-kicker">Gatey</p><h1 id="more-title">More</h1><p>Phone setup and account settings.</p></div>
         {gatePhoneNumber ? <a className="resident-install-card" href={`tel:${gatePhoneNumber}`}><div className="resident-feature-icon"><Phone aria-hidden="true" /></div><div><p className="resident-kicker">Call-to-open</p><h2>{formatPhoneNumber(gatePhoneNumber)}</h2><p>Tap to call from your authorized phone number.</p></div></a> : null}
-        <section className="resident-install-card"><div className="resident-feature-icon"><Plus aria-hidden="true" /></div><div><p className="resident-kicker">Faster next time</p><h2>Add Gatey to your home screen</h2><p>On iPhone, tap Share, then “Add to Home Screen.” On Android, open the browser menu and tap “Add to Home screen.”</p></div></section>
+        {showInstallCard ? <section className="resident-install-card resident-home-screen-card"><div className="resident-feature-icon"><Plus aria-hidden="true" /></div><div><p className="resident-kicker">Faster next time</p><h2>Add Gatey to your home screen</h2><p>On iPhone, tap Share, then “Add to Home Screen.” On Android, open the browser menu and tap “Add to Home screen.”</p></div><button className="resident-install-dismiss" type="button" onClick={dismissInstallCard} aria-label="Dismiss add to home screen suggestion"><X aria-hidden="true" /></button></section> : null}
         <section className="resident-settings-list">
           <div className="resident-settings-person"><span>{userName.slice(0, 1).toUpperCase()}</span><div><strong>{userName}</strong><small>{householdName}</small></div></div>
           <button type="button" onClick={openPasswordDialog}><KeyRound aria-hidden="true" /><span>Change password</span><ChevronRight aria-hidden="true" /></button>
