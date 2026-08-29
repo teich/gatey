@@ -20,6 +20,8 @@ function actionLabel(event: AuditEvent) {
   if (event.action === "gate-code.created") return "Created a gate code";
   if (event.action === "gate-code.disabled") return "Disabled a gate code";
   if (event.action === "gate-code.migrated") return "Moved a code to Gatey";
+  if (event.action === "person.service-account-marked") return "Marked a UniFi service account";
+  if (event.action === "person.service-account-restored") return "Restored a UniFi person";
   return event.action.replaceAll(".", " ");
 }
 
@@ -33,6 +35,7 @@ function detailLabel(event: AuditEvent) {
   }
   if (event.action === "party.enabled" && event.details.source === "twilio") return "30-minute phone hold";
   if (event.details.startsAt && event.details.endsAt) return `${formatDate(event.details.startsAt)} – ${formatDate(event.details.endsAt)}`;
+  if (event.details.person) return event.details.person;
   if (event.details.label) return event.details.label;
   return "—";
 }
