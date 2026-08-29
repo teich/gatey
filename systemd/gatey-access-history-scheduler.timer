@@ -1,0 +1,11 @@
+[Unit]
+Description=Synchronize UniFi access history every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=1min
+Persistent=true
+Unit=gatey-access-history-scheduler.service
+
+[Install]
+WantedBy=timers.target

@@ -1,14 +1,13 @@
 import { hasGateCodePin, hasHomeCode, listGateCodes, saveGateCode, type GateCodeKind } from "@/lib/gate-codes";
-import { generateGateCodePin, getCredentialLastUse, provisionGateCode } from "@/lib/unifi-access";
+import { generateGateCodePin, provisionGateCode } from "@/lib/unifi-access";
 import { authorizeHouseholdRequest } from "@/lib/api-authorization";
 import { recordAuditEvent } from "@/lib/audit-log";
+import { listGateCodeUsageSummaries } from "@/lib/access-history";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ONGOING_CONTROLLER_END = "2040-01-01T00:00:00.000Z";
-
-type Usage = { lastUsedAt?: string; lastUseKnown: boolean };
 
 function validKind(value: unknown): value is GateCodeKind {
   return value === "home" || value === "ongoing" || value === "temporary";
@@ -18,14 +17,21 @@ export async function GET(request: Request) {
   const authorization = await authorizeHouseholdRequest(request);
   if (authorization.response) return authorization.response;
   const codes = listGateCodes(authorization.context.household.id);
-  const usage = new Map<string, Usage>(await Promise.all(codes.map(async (code): Promise<[string, Usage]> => {
-    try {
-      return [code.id, { lastUsedAt: await getCredentialLastUse(code.controllerVisitorId, code.startsAt, code.controllerEndsAt), lastUseKnown: true }];
-    } catch {
-      return [code.id, { lastUseKnown: false }];
-    }
-  })));
-  return Response.json({ codes: codes.map((code) => ({ ...code, ...usage.get(code.id) })) });
+  const usage = listGateCodeUsageSummaries(authorization.context.household.id);
+  return Response.json({
+    codes: codes.map((code) => {
+      const summary = usage.get(code.id);
+      return {
+        ...code,
+        useCount: summary?.useCount || 0,
+        usageWindowDays: summary?.usageWindowDays || 90,
+        weeklyUses: summary?.weeklyUses || [],
+        lastUsedAt: summary?.lastUsedAt,
+        lastUseKnown: summary?.known || false,
+        usageCoverageStartsAt: summary?.coverageStartsAt,
+      };
+    }),
+  });
 }
 
 export async function POST(request: Request) {

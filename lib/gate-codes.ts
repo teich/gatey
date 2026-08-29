@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { database } from "@/lib/database";
 import { gateCodes, visitorHouseholds } from "@/lib/schema";
+import { linkGateCodeActors, refreshGateCodeActorLabel } from "@/lib/access-history";
 
 export type GateCodeKind = "home" | "ongoing" | "temporary";
 export type GateCodeState = "active" | "disabled";
@@ -72,6 +73,7 @@ export function saveGateCode(input: {
   endsAt?: string;
   controllerEndsAt: string;
   controllerVisitorId: string;
+  legacyControllerVisitorIds?: string[];
 }) {
   const id = input.id || randomUUID();
   const now = new Date().toISOString();
@@ -94,6 +96,13 @@ export function saveGateCode(input: {
     tx.insert(visitorHouseholds).values({ controllerVisitorId: input.controllerVisitorId, householdId: input.householdId, assignedAt: now })
       .onConflictDoUpdate({ target: visitorHouseholds.controllerVisitorId, set: { householdId: input.householdId, assignedAt: now } }).run();
   }, { behavior: "immediate" });
+  linkGateCodeActors({
+    gateCodeId: id,
+    householdId: input.householdId,
+    label: input.label,
+    currentControllerActorId: input.controllerVisitorId,
+    legacyControllerActorIds: input.legacyControllerVisitorIds,
+  });
   return id;
 }
 
@@ -102,6 +111,7 @@ export function updateGateCode(input: { householdId: string; id: string; label?:
   if (!existing) return undefined;
   database.update(gateCodes).set({ label: input.label ?? existing.label, pin: input.pin ?? existing.pin, updatedAt: new Date().toISOString() })
     .where(and(eq(gateCodes.id, input.id), eq(gateCodes.householdId, input.householdId))).run();
+  if (input.label !== undefined) refreshGateCodeActorLabel(input.id, input.householdId, input.label);
   return findGateCode(input.householdId, input.id);
 }
 

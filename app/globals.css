@@ -1191,6 +1191,40 @@ button { -webkit-tap-highlight-color: transparent; }
   font-size: 12px;
 }
 
+.resident-code-usage {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: .7rem;
+  color: var(--gatey-muted);
+}
+
+.resident-code-usage span:first-child {
+  display: grid;
+  gap: .2rem;
+}
+
+.resident-code-usage strong { color: var(--ink); font-size: .82rem; }
+.resident-code-usage small { font-size: .75rem; }
+.resident-house-usage { margin: 0 0 1rem; text-align: left; }
+
+.resident-usage-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  width: 58px;
+  height: 28px;
+}
+
+.resident-usage-bars i {
+  flex: 1;
+  min-height: 3px;
+  border-radius: 2px;
+  background: var(--forest);
+  opacity: .65;
+}
+
 .resident-gate-guest-section {
   margin-top: 28px;
 }

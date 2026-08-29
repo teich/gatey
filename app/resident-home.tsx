@@ -45,6 +45,9 @@ type GuestCode = {
   revokedAt?: string;
   lastUsedAt?: string;
   lastUseKnown?: boolean;
+  useCount?: number;
+  usageWindowDays?: number;
+  weeklyUses?: number[];
 };
 
 type PermanentCode = {
@@ -54,6 +57,9 @@ type PermanentCode = {
   kind: "household" | "person";
   lastUsedAt?: string;
   lastUseKnown?: boolean;
+  useCount?: number;
+  usageWindowDays?: number;
+  weeklyUses?: number[];
 };
 
 type GateCodeResponse = GuestCode & {
@@ -145,6 +151,18 @@ function codeLastUsed(code: Pick<GuestCode, "lastUsedAt" | "lastUseKnown">) {
   return `Used ${formatDateTime(code.lastUsedAt, used.getFullYear() !== today.getFullYear())}`;
 }
 
+function codeUsage(code: Pick<GuestCode, "useCount" | "usageWindowDays" | "lastUseKnown">) {
+  if (code.lastUseKnown === false) return "Usage history is syncing";
+  const count = code.useCount || 0;
+  const days = code.usageWindowDays || 90;
+  return `${count} successful ${count === 1 ? "use" : "uses"} in ${days} days`;
+}
+
+function UsageBars({ values = [] }: { values?: number[] }) {
+  const max = Math.max(1, ...values);
+  return <span className="resident-usage-bars" aria-label="Weekly usage over the last eight weeks">{values.map((value, index) => <i key={index} style={{ height: `${Math.max(12, Math.round((value / max) * 100))}%` }} title={`${value} uses`} />)}</span>;
+}
+
 function toLocalInputValue(date: Date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
@@ -207,7 +225,7 @@ function GuestCodeCard({
         <p className="resident-small-pin" aria-label={`Gate code ${code.pin.split("").join(" ")}`}>{spacedPin(code.pin)}</p>
       </div>
       <p className="resident-code-timing">{codeTiming(code, state)}</p>
-      <p className="resident-code-last-used">{codeLastUsed(code)}</p>
+      <div className="resident-code-usage"><span><strong>{codeUsage(code)}</strong><small>{codeLastUsed(code)}</small></span><UsageBars values={code.weeklyUses} /></div>
       <div className="resident-card-actions">
         <button type="button" onClick={() => onCopy(code)}><Copy aria-hidden="true" />{copied ? "Copied" : "Copy"}</button>
         <button type="button" onClick={() => onShare(code)}><Share2 aria-hidden="true" />Share</button>
@@ -219,7 +237,7 @@ function GuestCodeCard({
 
 function GuestCodeSummaryCard({ code, onOpen }: { code: GuestCode; onOpen: () => void }) {
   return <button className="resident-guest-summary-card" type="button" onClick={onOpen}>
-    <span><strong>{code.label || "Guest"}</strong><small>{codeLastUsed(code)}</small></span>
+    <span><strong>{code.label || "Guest"}</strong><small>{codeUsage(code)} · {codeLastUsed(code)}</small></span>
     <b aria-label={`Gate code ${code.pin.split("").join(" ")}`}>{spacedPin(code.pin)}</b>
     <ChevronRight aria-hidden="true" />
   </button>;
@@ -784,12 +802,13 @@ export function ResidentHome({
         <section className="resident-house-code" aria-labelledby="house-code-title">
           <div className="resident-section-title"><div><p className="resident-kicker">Shared by your household</p><h2 id="house-code-title">{householdName} gate code</h2></div><House aria-hidden="true" /></div>
           <p className="resident-large-pin" aria-label={householdCode ? `Gate code ${householdCode.pin.split("").join(" ")}` : "No household gate code"}>{householdCode ? spacedPin(householdCode.pin) : "Not set"}</p>
+          {householdCode ? <div className="resident-code-usage resident-house-usage"><span><strong>{codeUsage(householdCode)}</strong><small>{codeLastUsed(householdCode)}</small></span><UsageBars values={householdCode.weeklyUses} /></div> : null}
           <button className="resident-secondary-button" type="button" onClick={openHouseCodeDialog}>{householdCode ? "Change gate code" : "Set gate code"}</button>
         </section>
 
         <section className="resident-code-section" aria-labelledby="permanent-title">
           <div className="resident-section-title"><div><p className="resident-kicker">Always works</p><h2 id="permanent-title">Ongoing codes</h2></div><button className="resident-add-button" type="button" onClick={openPersonCodeDialog}><Plus aria-hidden="true" />Add code</button></div>
-          {personalCodes.length ? <div className="resident-permanent-list">{personalCodes.map((code) => <article key={code.id}><span className="resident-person-mark">{code.label.slice(0, 1).toUpperCase()}</span><div><h3>{code.label}</h3><p>{codeLastUsed(code)}</p></div><strong>{spacedPin(code.pin)}</strong></article>)}</div> : <div className="resident-empty-compact"><UsersRound aria-hidden="true" /><span>No ongoing codes yet.</span></div>}
+          {personalCodes.length ? <div className="resident-permanent-list">{personalCodes.map((code) => <article key={code.id}><span className="resident-person-mark">{code.label.slice(0, 1).toUpperCase()}</span><div><h3>{code.label}</h3><p>{codeUsage(code)}</p><small>{codeLastUsed(code)}</small></div><UsageBars values={code.weeklyUses} /><strong>{spacedPin(code.pin)}</strong></article>)}</div> : <div className="resident-empty-compact"><UsersRound aria-hidden="true" /><span>No ongoing codes yet.</span></div>}
         </section>
 
         <section className="resident-code-section" aria-labelledby="guest-title">

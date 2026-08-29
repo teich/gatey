@@ -21,6 +21,7 @@ export const relations = defineRelations(schema, (r) => ({
     invitations: r.many.invitation(),
     visitorAssignments: r.many.visitorHouseholds(),
     gateCodes: r.many.gateCodes(),
+    unifiActorLinks: r.many.unifiActorLinks(),
   },
   member: {
     organization: r.one.organization({ from: r.member.organizationId, to: r.organization.id }),
@@ -38,6 +39,9 @@ export const relations = defineRelations(schema, (r) => ({
   },
   gateCodes: {
     organization: r.one.organization({ from: r.gateCodes.householdId, to: r.organization.id }),
+  },
+  unifiActorLinks: {
+    organization: r.one.organization({ from: r.unifiActorLinks.householdId, to: r.organization.id }),
   },
   userPhoneNumbers: {
     user: r.one.user({ from: r.userPhoneNumbers.userId, to: r.user.id }),

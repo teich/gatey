@@ -99,6 +99,8 @@ backup_dir="/var/lib/gatey/backups"
 service="gatey.service"
 party_timer="gatey-party-scheduler.timer"
 party_service="gatey-party-scheduler.service"
+access_timer="gatey-access-history-scheduler.timer"
+access_service="gatey-access-history-scheduler.service"
 environment_file="/etc/gatey/gatey.env"
 stage="$repo/.deploy-$expected_commit"
 
@@ -161,6 +163,8 @@ runuser -u "$app_user" -- git -C "$repo" merge --ff-only "$expected_commit"
 
 install -m 644 "$repo/systemd/$party_service" "/etc/systemd/system/$party_service"
 install -m 644 "$repo/systemd/$party_timer" "/etc/systemd/system/$party_timer"
+install -m 644 "$repo/systemd/$access_service" "/etc/systemd/system/$access_service"
+install -m 644 "$repo/systemd/$access_timer" "/etc/systemd/system/$access_timer"
 systemctl daemon-reload
 
 next_backup="$repo/.next.before-$previous_commit"
@@ -223,6 +227,11 @@ fi
 systemctl enable --now "$party_timer"
 if ! systemctl is-active --quiet "$party_timer"; then
   echo "The party scheduler timer did not start." >&2
+  exit 1
+fi
+systemctl enable --now "$access_timer"
+if ! systemctl is-active --quiet "$access_timer"; then
+  echo "The access-history scheduler timer did not start." >&2
   exit 1
 fi
 

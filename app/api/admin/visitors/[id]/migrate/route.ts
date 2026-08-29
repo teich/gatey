@@ -33,7 +33,16 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/v
     const endsAt = new Date(ONGOING_CONTROLLER_END);
     const { persisted: codeId } = await migrateVisitorGateCode(
       { oldVisitorId, householdName: household.name, label, pin, startsAt, endsAt },
-      (visitorId) => saveGateCode({ householdId, label, pin, kind, startsAt: startsAt.toISOString(), controllerEndsAt: endsAt.toISOString(), controllerVisitorId: visitorId }),
+      (visitorId) => saveGateCode({
+        householdId,
+        label,
+        pin,
+        kind,
+        startsAt: startsAt.toISOString(),
+        controllerEndsAt: endsAt.toISOString(),
+        controllerVisitorId: visitorId,
+        legacyControllerVisitorIds: [oldVisitorId],
+      }),
     );
     try {
       const { user } = authorization.context.session;

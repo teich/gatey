@@ -255,3 +255,50 @@ export const unifiServiceAccounts = table("unifi_service_accounts", {
   markedByUserId: text().notNull(),
   markedByName: text().notNull(),
 }, (t) => [index("unifi_service_accounts_marked_at_idx").on(t.markedAt)]);
+
+export const unifiAccessEvents = table("unifi_access_events", {
+  id: text().primaryKey(),
+  occurredAt: text().notNull(),
+  actorControllerId: text(),
+  actorType: text().notNull().default(""),
+  actorDisplayName: text().notNull().default(""),
+  credentialProvider: text().notNull().default(""),
+  eventType: text().notNull(),
+  result: text().notNull().default(""),
+  displayMessage: text().notNull().default(""),
+  reason: text().notNull().default(""),
+  doorId: text().notNull(),
+  doorName: text().notNull().default(""),
+  activityResourceId: text(),
+  receivedAt: text().notNull(),
+}, (t) => [
+  index("unifi_access_events_occurred_idx").on(t.occurredAt),
+  index("unifi_access_events_actor_occurred_idx").on(t.actorControllerId, t.occurredAt),
+  index("unifi_access_events_result_occurred_idx").on(t.result, t.occurredAt),
+]);
+
+export const unifiActorLinks = table("unifi_actor_links", {
+  controllerActorId: text().primaryKey(),
+  actorType: text().notNull(),
+  subjectType: text({ enum: ["gate_code", "credential", "person", "visitor"] }).notNull(),
+  subjectId: text().notNull(),
+  householdId: text().references(() => organization.id, { onDelete: "restrict" }),
+  label: text().notNull().default(""),
+  role: text({ enum: ["current", "legacy", "assigned"] }).notNull().default("current"),
+  linkedAt: text().notNull(),
+  retiredAt: text(),
+}, (t) => [
+  index("unifi_actor_links_subject_idx").on(t.subjectType, t.subjectId),
+  index("unifi_actor_links_household_idx").on(t.householdId),
+]);
+
+export const unifiAccessSyncState = table("unifi_access_sync_state", {
+  id: integer().primaryKey(),
+  state: text({ enum: ["idle", "running", "succeeded", "failed"] }).notNull().default("idle"),
+  coverageStartsAt: text(),
+  completeThrough: text(),
+  lastStartedAt: text(),
+  lastSucceededAt: text(),
+  lastError: text().notNull().default(""),
+  updatedAt: text().notNull(),
+}, (t) => [check("unifi_access_sync_state_singleton_check", sql`${t.id} = 1`)]);

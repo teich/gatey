@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HouseIcon, LayoutDashboardIcon, PhoneCallIcon, ScrollTextIcon, TicketIcon, UsersIcon } from "lucide-react";
+import { HistoryIcon, HouseIcon, LayoutDashboardIcon, PhoneCallIcon, ScrollTextIcon, TicketIcon, UsersIcon } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -23,6 +23,7 @@ const navigation = [
   { title: "Households", href: "/admin/households", icon: HouseIcon },
   { title: "People", href: "/admin/people", icon: UsersIcon },
   { title: "Visitors", href: "/admin/visitors", icon: TicketIcon },
+  { title: "Access activity", href: "/admin/access", icon: HistoryIcon },
   { title: "Phone calls", href: "/admin/calls", icon: PhoneCallIcon },
   { title: "Activity log", href: "/admin/activity", icon: ScrollTextIcon },
 ];

@@ -4,7 +4,13 @@ import { randomUUID } from "node:crypto";
 import { Agent, request as httpsRequest } from "node:https";
 import type { Credential } from "@/lib/credentials";
 
-type ApiResponse<T> = { code?: string; data?: T; msg?: string; message?: string };
+type ApiResponse<T> = {
+  code?: string;
+  data?: T;
+  msg?: string;
+  message?: string;
+  pagination?: { page_num?: number; page_size?: number; total?: number };
+};
 type Door = {
   id: string;
   name: string;
@@ -27,7 +33,44 @@ type UnifiVisitor = {
 };
 
 type UnifiSystemLog = {
-  _source?: { event?: { published?: number; result?: string } };
+  "@timestamp"?: string;
+  _id?: string;
+  _source?: {
+    actor?: {
+      id?: string;
+      type?: string;
+      display_name?: string;
+      alternate_name?: string;
+    };
+    authentication?: {
+      credential_provider?: string;
+      issuer?: string;
+    };
+    event?: {
+      published?: number;
+      result?: string;
+      type?: string;
+      display_message?: string;
+      reason?: string;
+    };
+    target?: Array<{
+      id?: string;
+      type?: string;
+      display_name?: string;
+    }>;
+  };
+};
+
+export type UnifiAccessLogPage = {
+  hits: UnifiSystemLog[];
+  pageNum: number;
+  pageSize: number;
+  total: number;
+};
+
+export type ConfiguredGateIdentity = {
+  id: string;
+  name: string;
 };
 
 type UnifiUser = {
@@ -140,7 +183,7 @@ async function unifiFetch(url: string, init: RequestInit, insecureTls: boolean):
   });
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function requestEnvelope<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
   const { baseUrl, token, insecureTls } = config();
   const response = await unifiFetch(`${baseUrl}${path}`, {
     ...init,
@@ -151,7 +194,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok || !["SUCCESS", "OK"].includes(String(body.code || "").toUpperCase())) {
     throw new Error(body.msg || body.message || body.code || `UniFi request failed (${response.status})`);
   }
-  return body.data as T;
+  return body;
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return (await requestEnvelope<T>(path, init)).data as T;
 }
 
 async function gateDoor(): Promise<Door> {
@@ -160,6 +207,36 @@ async function gateDoor(): Promise<Door> {
   const door = doors.find((item) => item.name.trim().toLowerCase() === doorName.toLowerCase());
   if (!door) throw new Error(`UniFi could not find the '${doorName}' gate.`);
   return door;
+}
+
+export async function getConfiguredGateIdentity(): Promise<ConfiguredGateIdentity> {
+  const door = await gateDoor();
+  return { id: door.id, name: door.name };
+}
+
+export async function fetchAccessLogPage(input: {
+  since: number;
+  until: number;
+  pageNum: number;
+  pageSize?: number;
+}): Promise<UnifiAccessLogPage> {
+  const pageNum = Math.max(1, Math.floor(input.pageNum));
+  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize || 100)));
+  const response = await requestEnvelope<{ hits?: UnifiSystemLog[] }>(`/system/logs?page_num=${pageNum}&page_size=${pageSize}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      topic: "door_openings",
+      since: Math.floor(input.since),
+      until: Math.floor(input.until),
+    }),
+  });
+  return {
+    hits: response.data?.hits || [],
+    pageNum: response.pagination?.page_num || pageNum,
+    pageSize: response.pagination?.page_size || pageSize,
+    total: response.pagination?.total || 0,
+  };
 }
 
 function gateStatus(door: Door): GateStatus {
