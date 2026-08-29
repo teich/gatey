@@ -27,6 +27,17 @@ import {
   X,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import {
+  dateFromGateyDateTimeInput,
+  dateFromGateyTimeInput,
+  formatGateyDateTime as formatInGateyTime,
+  gateyDateKey,
+  gateyDateTimeInputValue,
+  gateyEndOfDay,
+  gateyTimeInputValue,
+  gateyYear,
+  shiftGateyDateKey,
+} from "@/lib/date-time";
 
 type Duration = "today" | "week" | "custom";
 type CodeState = "active" | "upcoming" | "expired" | "revoked";
@@ -76,12 +87,6 @@ type PartyMode = {
   householdName: string;
 };
 
-function endOfDay(date: Date) {
-  const result = new Date(date);
-  result.setHours(23, 59, 59, 999);
-  return result;
-}
-
 function getState(code: GuestCode, now = new Date()): CodeState {
   if (code.revokedAt) return "revoked";
   if (new Date(code.startsAt) > now) return "upcoming";
@@ -95,17 +100,17 @@ function spacedPin(pin: string) {
 }
 
 function formatDateTime(value: string, includeYear = false) {
-  return new Intl.DateTimeFormat(undefined, {
+  return formatInGateyTime(value, {
     month: "short",
     day: "numeric",
-    year: includeYear ? "numeric" : undefined,
+    ...(includeYear ? { year: "numeric" } : {}),
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(value));
+  });
 }
 
 function formatTime(value: string | Date) {
-  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+  return formatInGateyTime(value, { hour: "numeric", minute: "2-digit" });
 }
 
 function formatPhoneNumber(value: string) {
@@ -132,23 +137,19 @@ function codeTiming(code: GuestCode, state: CodeState) {
   if (state === "expired") return `Ended ${formatDateTime(code.endsAt, true)}`;
   if (state === "upcoming") return `Starts ${formatDateTime(code.startsAt, true)}`;
 
-  const end = new Date(code.endsAt);
   const today = new Date();
-  return end.toDateString() === today.toDateString()
-    ? `Works until ${formatTime(end)} today`
-    : `Works until ${formatDateTime(code.endsAt, end.getFullYear() !== today.getFullYear())}`;
+  return gateyDateKey(code.endsAt) === gateyDateKey(today)
+    ? `Works until ${formatTime(code.endsAt)} today`
+    : `Works until ${formatDateTime(code.endsAt, gateyYear(code.endsAt) !== gateyYear(today))}`;
 }
 
 function codeLastUsed(code: Pick<GuestCode, "lastUsedAt" | "lastUseKnown">) {
   if (code.lastUseKnown === false) return "Last use unavailable";
   if (!code.lastUsedAt) return "Not used yet";
-  const used = new Date(code.lastUsedAt);
   const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (used.toDateString() === today.toDateString()) return `Used today at ${formatTime(used)}`;
-  if (used.toDateString() === yesterday.toDateString()) return `Used yesterday at ${formatTime(used)}`;
-  return `Used ${formatDateTime(code.lastUsedAt, used.getFullYear() !== today.getFullYear())}`;
+  if (gateyDateKey(code.lastUsedAt) === gateyDateKey(today)) return `Used today at ${formatTime(code.lastUsedAt)}`;
+  if (gateyDateKey(code.lastUsedAt) === shiftGateyDateKey(today, -1)) return `Used yesterday at ${formatTime(code.lastUsedAt)}`;
+  return `Used ${formatDateTime(code.lastUsedAt, gateyYear(code.lastUsedAt) !== gateyYear(today))}`;
 }
 
 function codeUsage(code: Pick<GuestCode, "useCount" | "usageWindowDays" | "lastUseKnown">) {
@@ -163,27 +164,12 @@ function UsageBars({ values = [] }: { values?: number[] }) {
   return <span className="resident-usage-bars" aria-label="Weekly usage over the last eight weeks">{values.map((value, index) => <i key={index} style={{ height: `${Math.max(12, Math.round((value / max) * 100))}%` }} title={`${value} uses`} />)}</span>;
 }
 
-function toLocalInputValue(date: Date) {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function toTimeInputValue(date: Date) {
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-function fromTodayTime(value: string) {
-  const [hours, minutes] = value.split(":").map(Number);
-  const result = new Date();
-  result.setHours(hours, minutes, 0, 0);
-  return result;
-}
-
 function defaultPartyEnd() {
-  const result = new Date();
-  result.setMinutes(result.getMinutes() < 30 ? 30 : 60, 0, 0);
-  result.setHours(result.getHours() + 3);
-  return result > endOfDay(new Date()) ? endOfDay(new Date()) : result;
+  const now = Date.now();
+  const nextHalfHour = Math.ceil(now / (30 * 60_000)) * 30 * 60_000;
+  const result = new Date(nextHalfHour + 3 * 60 * 60_000);
+  const end = gateyEndOfDay(now);
+  return result > end ? end : result;
 }
 
 function partyPhase(party: PartyMode | null) {
@@ -300,8 +286,8 @@ export function ResidentHome({
   const [partyLoadError, setPartyLoadError] = useState("");
   const [partyDialogOpen, setPartyDialogOpen] = useState(false);
   const [partyStartChoice, setPartyStartChoice] = useState<"now" | "later">("now");
-  const [partyStartTime, setPartyStartTime] = useState(() => toTimeInputValue(new Date(Date.now() + 30 * 60_000)));
-  const [partyEndTime, setPartyEndTime] = useState(() => toTimeInputValue(defaultPartyEnd()));
+  const [partyStartTime, setPartyStartTime] = useState(() => gateyTimeInputValue(new Date(Date.now() + 30 * 60_000)));
+  const [partyEndTime, setPartyEndTime] = useState(() => gateyTimeInputValue(defaultPartyEnd()));
   const [partyError, setPartyError] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
@@ -449,16 +435,16 @@ export function ResidentHome({
   function openPartyDialog() {
     const later = new Date(Date.now() + 30 * 60_000);
     setPartyStartChoice("now");
-    setPartyStartTime(toTimeInputValue(later));
-    setPartyEndTime(toTimeInputValue(defaultPartyEnd()));
+    setPartyStartTime(gateyTimeInputValue(later));
+    setPartyEndTime(gateyTimeInputValue(defaultPartyEnd()));
     setPartyError("");
     setPartyDialogOpen(true);
   }
 
   async function saveParty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const startsAt = partyStartChoice === "now" ? new Date() : fromTodayTime(partyStartTime);
-    const endsAt = fromTodayTime(partyEndTime);
+    const startsAt = partyStartChoice === "now" ? new Date() : dateFromGateyTimeInput(partyStartTime);
+    const endsAt = dateFromGateyTimeInput(partyEndTime);
     if (partyStartChoice === "later" && startsAt <= new Date()) {
       setPartyError("Choose a start time later today.");
       return;
@@ -506,8 +492,8 @@ export function ResidentHome({
     const current = new Date();
     setLabel("");
     setDuration("today");
-    setCustomStart(toLocalInputValue(current));
-    setCustomEnd(toLocalInputValue(endOfDay(current)));
+    setCustomStart(gateyDateTimeInputValue(current));
+    setCustomEnd(gateyDateTimeInputValue(gateyEndOfDay(current)));
     setError("");
     setScreen("create");
   }
@@ -525,12 +511,12 @@ export function ResidentHome({
     event.preventDefault();
     const current = new Date();
     let startsAt = current;
-    let endsAt = endOfDay(current);
+    let endsAt = gateyEndOfDay(current);
 
-    if (duration === "week") endsAt = endOfDay(new Date(current.getFullYear(), current.getMonth(), current.getDate() + 6));
+    if (duration === "week") endsAt = gateyEndOfDay(current, 6);
     if (duration === "custom") {
-      startsAt = new Date(customStart);
-      endsAt = new Date(customEnd);
+      startsAt = dateFromGateyDateTimeInput(customStart);
+      endsAt = dateFromGateyDateTimeInput(customEnd);
       if (!customStart || !customEnd || Number.isNaN(startsAt.valueOf()) || Number.isNaN(endsAt.valueOf())) {
         setError("Choose both a start and end time.");
         return;
@@ -697,8 +683,7 @@ export function ResidentHome({
   }
 
   if (screen === "create") {
-    const weekEnd = new Date();
-    weekEnd.setDate(weekEnd.getDate() + 6);
+    const weekEnd = gateyEndOfDay(new Date(), 6);
     return (
       <main className="resident-shell resident-flow-shell">
         {renderFlowHeader("Create guest code", "codes")}
@@ -711,7 +696,7 @@ export function ResidentHome({
             <legend>How long should it work?</legend>
             <div className="resident-duration-options">
               <label className={duration === "today" ? "selected" : ""}><input type="radio" name="duration" checked={duration === "today"} onChange={() => setDuration("today")} /><strong>Today</strong><span>Until midnight</span></label>
-              <label className={duration === "week" ? "selected" : ""}><input type="radio" name="duration" checked={duration === "week"} onChange={() => setDuration("week")} /><strong>7 days</strong><span>Through {new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(weekEnd)}</span></label>
+              <label className={duration === "week" ? "selected" : ""}><input type="radio" name="duration" checked={duration === "week"} onChange={() => setDuration("week")} /><strong>7 days</strong><span>Through {formatInGateyTime(weekEnd, { weekday: "long" })}</span></label>
               <label className={duration === "custom" ? "selected" : ""}><input type="radio" name="duration" checked={duration === "custom"} onChange={() => setDuration("custom")} /><strong>Choose dates</strong><span>Exact times</span></label>
             </div>
           </fieldset>

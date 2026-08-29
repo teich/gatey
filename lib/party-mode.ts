@@ -3,6 +3,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { recordAuditEvent } from "@/lib/audit-log";
 import { database } from "@/lib/database";
+import { formatGateyDateTime, gateyDateKey } from "@/lib/date-time";
 import { partyMode } from "@/lib/schema";
 import { endGateHoldOpen, holdGateOpenUntil } from "@/lib/unifi-access";
 
@@ -46,7 +47,7 @@ function updatePartyState(state: PartyState) {
 }
 
 function isToday(date: Date, now: Date) {
-  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  return gateyDateKey(date) === gateyDateKey(now);
 }
 
 function armPartyTimer(row = currentRow()) {
@@ -151,7 +152,7 @@ export async function schedulePartyMode(input: {
   database.transaction((tx) => {
     const existing = currentRow();
     if (existing && ["scheduled", "starting", "active"].includes(existing.state) && new Date(existing.endsAt) > now) {
-      throw new PartyModeConflictError(`Party mode is already planned by ${existing.householdName} until ${new Date(existing.endsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`);
+      throw new PartyModeConflictError(`Party mode is already planned by ${existing.householdName} until ${formatGateyDateTime(existing.endsAt, { hour: "numeric", minute: "2-digit" })}.`);
     }
     const timestamp = now.toISOString();
     const values = { id: 1, state: "scheduled" as const, startsAt: input.startsAt.toISOString(), endsAt: input.endsAt.toISOString(), householdId: input.householdId, householdName: input.householdName, actorUserId: input.actorUserId, actorName: input.actorName.slice(0, 160), createdAt: timestamp, updatedAt: timestamp };

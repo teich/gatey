@@ -1,11 +1,12 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { listAuditEvents, type AuditEvent } from "@/lib/audit-log";
+import { formatGateyDateTime } from "@/lib/date-time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" }).format(new Date(value));
+  return formatGateyDateTime(value, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
 
 function actionLabel(event: AuditEvent) {

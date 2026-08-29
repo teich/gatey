@@ -1,13 +1,14 @@
 import { SyncAccessButton } from "@/app/admin/access/sync-access-button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { accessActivityTotals, getAccessSyncStatus, listAccessActivity } from "@/lib/access-history";
+import { formatGateyDateTime } from "@/lib/date-time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 function formatDate(value?: string) {
   if (!value) return "Not yet";
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
+  return formatGateyDateTime(value, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function methodLabel(value: string) {

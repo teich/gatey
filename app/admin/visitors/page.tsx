@@ -3,6 +3,7 @@ import { MigrateVisitorButton } from "@/app/admin/visitors/migrate-visitor-butto
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { listVisitorHouseholds } from "@/lib/admin-assignments";
 import { listActorUsageSummaries } from "@/lib/access-history";
+import { formatGateyDateTime } from "@/lib/date-time";
 import { managedVisitorPins } from "@/lib/db";
 import { managedGateyVisitorIds } from "@/lib/gate-codes";
 import { listHouseholds } from "@/lib/households";
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
 
 function formatDate(value?: string) {
   if (!value) return "Not set";
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
+  return formatGateyDateTime(value, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function labelStatus(status: string) { return status.toLowerCase().replaceAll("_", " "); }
