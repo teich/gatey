@@ -100,6 +100,14 @@ function formatTime(value: string | Date) {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
+function formatPhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  return value;
+}
+
 function codeTiming(code: GuestCode, state: CodeState) {
   if (state === "revoked") return `Canceled ${formatDateTime(code.revokedAt!, true)}`;
   if (state === "expired") return `Ended ${formatDateTime(code.endsAt, true)}`;
@@ -710,14 +718,20 @@ export function ResidentHome({
           {gateError ? <p className="resident-gate-error" role="alert">{gateError}</p> : null}
         </section>
 
-        <section className={`resident-party-card resident-party-${currentPartyPhase}`} aria-labelledby="party-title">
+        {gatePhoneNumber || currentPartyPhase === "off" ? <div className={`resident-gate-tools${gatePhoneNumber && currentPartyPhase === "off" ? "" : " resident-gate-tools-single"}`}>
+          {gatePhoneNumber ? <a className="resident-call-action" href={`tel:${gatePhoneNumber}`} aria-label={`Call Gatey at ${gatePhoneNumber}`}><Phone aria-hidden="true" /><span><small>Call-to-open</small><strong>{formatPhoneNumber(gatePhoneNumber)}</strong></span></a> : null}
+          {currentPartyPhase === "off" ? <button className="resident-party-enable" type="button" onClick={openPartyDialog}><PartyPopper aria-hidden="true" /><span><small>Party mode</small><strong>Turn on</strong></span><ChevronRight aria-hidden="true" /></button> : null}
+        </div> : null}
+
+        {currentPartyPhase !== "off" ? <section className={`resident-party-card resident-party-${currentPartyPhase}`} aria-labelledby="party-title">
           <div className="resident-feature-icon"><PartyPopper aria-hidden="true" /></div>
           <div className="resident-feature-copy">
             <h2 id="party-title">Party mode</h2>
-            {currentPartyPhase === "active" && party ? <><p>{party.householdName === householdName ? `Ends at ${formatTime(party.endsAt)}` : `${party.householdName} has the gate open until ${formatTime(party.endsAt)}`}</p><strong className="resident-countdown">{countdown(party.endsAt, now)}</strong></> : currentPartyPhase === "scheduled" && party ? <p>{party.householdName === householdName ? `Opens at ${formatTime(party.startsAt)} and ends at ${formatTime(party.endsAt)}.` : `${party.householdName} scheduled this until ${formatTime(party.endsAt)}.`}</p> : partyLoadError ? <p>{partyLoadError}</p> : null}
+            {currentPartyPhase === "active" && party ? <><p>{party.householdName === householdName ? `Ends at ${formatTime(party.endsAt)}` : `${party.householdName} has the gate open until ${formatTime(party.endsAt)}`}</p><strong className="resident-countdown">{countdown(party.endsAt, now)}</strong></> : currentPartyPhase === "scheduled" && party ? <p>{party.householdName === householdName ? `Opens at ${formatTime(party.startsAt)} and ends at ${formatTime(party.endsAt)}.` : `${party.householdName} scheduled this until ${formatTime(party.endsAt)}.`}</p> : null}
           </div>
-          {currentPartyPhase === "off" ? <button className="resident-row-action" type="button" onClick={openPartyDialog}>Enable<ChevronRight aria-hidden="true" /></button> : partyCanEnd ? <button className="resident-row-action resident-danger-action" type="button" disabled={partyPending} onClick={() => void endParty()}>{partyPending ? "Working…" : currentPartyPhase === "active" ? "End now" : "Cancel"}</button> : <span className="resident-party-in-use">In use</span>}
-        </section>
+          {partyCanEnd ? <button className="resident-row-action resident-danger-action" type="button" disabled={partyPending} onClick={() => void endParty()}>{partyPending ? "Working…" : currentPartyPhase === "active" ? "End now" : "Cancel"}</button> : <span className="resident-party-in-use">In use</span>}
+        </section> : null}
+        {partyLoadError ? <p className="resident-party-error" role="status">{partyLoadError}</p> : null}
 
         <section className="resident-gate-guest-section" aria-labelledby="gate-guest-title">
           <div className="resident-section-title"><div><p className="resident-kicker">Household access</p><h2 id="gate-guest-title">Guest codes</h2></div><button className="resident-add-button" type="button" onClick={openCreate}><Plus aria-hidden="true" />Create</button></div>
@@ -758,7 +772,7 @@ export function ResidentHome({
 
       {screen === "more" ? <section className="resident-page" aria-labelledby="more-title">
         <div className="resident-page-heading"><p className="resident-kicker">Gatey</p><h1 id="more-title">More</h1><p>Phone setup and account settings.</p></div>
-        {gatePhoneNumber ? <a className="resident-install-card" href={`tel:${gatePhoneNumber}`}><div className="resident-feature-icon"><Phone aria-hidden="true" /></div><div><p className="resident-kicker">Call-to-open</p><h2>{gatePhoneNumber}</h2><p>Call from a phone number authorized by your Gatey administrator.</p></div></a> : null}
+        {gatePhoneNumber ? <a className="resident-install-card" href={`tel:${gatePhoneNumber}`}><div className="resident-feature-icon"><Phone aria-hidden="true" /></div><div><p className="resident-kicker">Call-to-open</p><h2>{formatPhoneNumber(gatePhoneNumber)}</h2><p>Tap to call from your authorized phone number.</p></div></a> : null}
         <section className="resident-install-card"><div className="resident-feature-icon"><Plus aria-hidden="true" /></div><div><p className="resident-kicker">Faster next time</p><h2>Add Gatey to your home screen</h2><p>On iPhone, tap Share, then “Add to Home Screen.” On Android, open the browser menu and tap “Add to Home screen.”</p></div></section>
         <section className="resident-settings-list">
           <div className="resident-settings-person"><span>{userName.slice(0, 1).toUpperCase()}</span><div><strong>{userName}</strong><small>{householdName}</small></div></div>
