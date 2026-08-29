@@ -1069,6 +1069,23 @@ button { -webkit-tap-highlight-color: transparent; }
   letter-spacing: .1em;
 }
 
+.resident-expire-code {
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.resident-danger-button:disabled,
+.resident-secondary-button:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+
 .resident-empty-compact {
   display: flex;
   min-height: 82px;

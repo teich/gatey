@@ -66,6 +66,7 @@ type PermanentCode = {
   label: string;
   pin: string;
   kind: "household" | "person";
+  managedByGatey?: boolean;
   lastUsedAt?: string;
   lastUseKnown?: boolean;
   useCount?: number;
@@ -302,6 +303,9 @@ export function ResidentHome({
   const [createdCode, setCreatedCode] = useState<GuestCode | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<GuestCode | null>(null);
+  const [expireTarget, setExpireTarget] = useState<PermanentCode | null>(null);
+  const [expirePending, setExpirePending] = useState(false);
+  const [expireError, setExpireError] = useState("");
   const [pastOpen, setPastOpen] = useState(false);
   const [error, setError] = useState("");
 
@@ -331,7 +335,7 @@ export function ResidentHome({
         setGuestCodes(codes.filter((code) => code.kind === "temporary"));
         const managedPermanentCodes: PermanentCode[] = codes
           .filter((code) => code.kind !== "temporary" && code.state === "active")
-          .map((code) => ({ ...code, kind: code.kind === "home" ? "household" : "person" }));
+          .map((code) => ({ ...code, kind: code.kind === "home" ? "household" : "person", managedByGatey: true }));
         const managedPins = new Set(managedPermanentCodes.map((code) => code.pin));
         const existingPersonCodes: PermanentCode[] = storedPermanentCodes
           .filter((code) => !managedPins.has(code.pin))
@@ -587,6 +591,24 @@ export function ResidentHome({
     }
   }
 
+  async function confirmExpire() {
+    if (!expireTarget || expirePending) return;
+    setExpirePending(true);
+    setExpireError("");
+    try {
+      const response = await fetch(`/api/gate-codes/${expireTarget.id}`, { method: "DELETE" });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not expire the ongoing code.");
+      setPermanentCodes((current) => current.filter((code) => code.id !== expireTarget.id));
+      setPreviewNotice(`${expireTarget.label} was expired.`);
+      setExpireTarget(null);
+    } catch (caught) {
+      setExpireError(caught instanceof Error ? caught.message : "Could not expire the ongoing code.");
+    } finally {
+      setExpirePending(false);
+    }
+  }
+
   function openHouseCodeDialog() {
     setCodeDialog("household");
     setCodeTargetId(householdCode?.id || "");
@@ -628,7 +650,7 @@ export function ResidentHome({
         const response = await fetch("/api/gate-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: isHome ? `${householdName} gate code` : codeName.trim(), pin: codePin, kind: isHome ? "home" : "ongoing" }) });
         const result = await response.json() as { code?: PermanentCode; error?: string };
         if (!response.ok || !result.code) throw new Error(result.error || "Could not save this gate code.");
-        setPermanentCodes((current) => [...current, { ...result.code!, kind: isHome ? "household" : "person" }]);
+        setPermanentCodes((current) => [...current, { ...result.code!, kind: isHome ? "household" : "person", managedByGatey: true }]);
       }
       setPreviewNotice(codeDialog === "household" ? "Home gate code saved." : `${codeName.trim()} was added.`);
       setCodeDialog(null);
@@ -804,7 +826,7 @@ export function ResidentHome({
 
         <section className="resident-code-section" aria-labelledby="permanent-title">
           <div className="resident-section-title"><div><p className="resident-kicker">Always works</p><h2 id="permanent-title">Ongoing codes</h2></div><button className="resident-add-button" type="button" onClick={openPersonCodeDialog}><Plus aria-hidden="true" />Add code</button></div>
-          {personalCodes.length ? <div className="resident-permanent-list">{personalCodes.map((code) => <article key={code.id}><span className="resident-person-mark">{code.label.slice(0, 1).toUpperCase()}</span><div><h3>{code.label}</h3><p>{codeUsage(code)}</p><small>{codeLastUsed(code)}</small></div><UsageBars values={code.weeklyUses} /><strong>{spacedPin(code.pin)}</strong></article>)}</div> : <div className="resident-empty-compact"><UsersRound aria-hidden="true" /><span>No ongoing codes yet.</span></div>}
+          {personalCodes.length ? <div className="resident-permanent-list">{personalCodes.map((code) => <article key={code.id}><span className="resident-person-mark">{code.label.slice(0, 1).toUpperCase()}</span><div><h3>{code.label}</h3><p>{codeUsage(code)}</p><small>{codeLastUsed(code)}</small></div><UsageBars values={code.weeklyUses} /><strong>{spacedPin(code.pin)}</strong>{code.managedByGatey ? <button className="resident-expire-code" type="button" aria-label={`Expire ${code.label}`} onClick={() => { setExpireError(""); setExpireTarget(code); }}>Expire</button> : null}</article>)}</div> : <div className="resident-empty-compact"><UsersRound aria-hidden="true" /><span>No ongoing codes yet.</span></div>}
         </section>
 
         <section className="resident-code-section" aria-labelledby="guest-title">
@@ -842,6 +864,8 @@ export function ResidentHome({
       {codeDialog ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="code-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Gate code</p><h2 id="code-dialog-title">{codeDialog === "household" ? `${householdCode ? "Change" : "Set"} ${householdName} gate code` : "Add ongoing code"}</h2></div><button type="button" onClick={() => setCodeDialog(null)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">{codeDialog === "household" ? "Everyone in your household can use this at the keypad." : "Use this for Sarah, a gardener, deliveries, or anyone else who should always be able to enter."}</p><form onSubmit={(event) => void savePermanentCode(event)}>{codeDialog === "person" ? <label className="resident-field-label" htmlFor="permanent-name">What is this for?<input id="permanent-name" className="resident-input" value={codeName} onChange={(event) => setCodeName(event.target.value)} placeholder="For example, Sarah or Gardener" autoFocus /></label> : null}<label className="resident-field-label" htmlFor="permanent-pin">Choose a gate code <span>4–6 numbers</span><input id="permanent-pin" className="resident-input resident-pin-input" value={codePin} onChange={(event) => setCodePin(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="off" placeholder="4826" autoFocus={codeDialog === "household"} /></label>{codeError ? <p className="resident-form-error" role="alert">{codeError}</p> : null}<button className="resident-primary-button" type="submit">{codeDialog === "household" ? "Save gate code" : "Add code"}</button></form></section></div> : null}
 
       {cancelTarget ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-title"><p className="resident-kicker">Please confirm</p><h2 id="cancel-title">Cancel {cancelTarget.label}&apos;s code?</h2><p className="resident-dialog-intro">The code <strong>{spacedPin(cancelTarget.pin)}</strong> will stop working right away.</p><div className="resident-dialog-actions"><button className="resident-danger-button" type="button" onClick={confirmCancel}>Yes, cancel code</button><button className="resident-secondary-button" type="button" onClick={() => setCancelTarget(null)}>Keep it active</button></div></section></div> : null}
+
+      {expireTarget ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="alertdialog" aria-modal="true" aria-labelledby="expire-title"><p className="resident-kicker">Please confirm</p><h2 id="expire-title">Expire {expireTarget.label}?</h2><p className="resident-dialog-intro">The ongoing code <strong>{spacedPin(expireTarget.pin)}</strong> will stop working right away. This cannot be undone.</p>{expireError ? <p className="resident-form-error" role="alert">{expireError}</p> : null}<div className="resident-dialog-actions"><button className="resident-danger-button" type="button" disabled={expirePending} onClick={() => void confirmExpire()}>{expirePending ? "Expiring…" : "Yes, expire code"}</button><button className="resident-secondary-button" type="button" disabled={expirePending} onClick={() => setExpireTarget(null)}>Keep it active</button></div></section></div> : null}
 
       {passwordDialogOpen ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="password-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Account security</p><h2 id="password-title">Change password</h2></div><button type="button" onClick={() => !passwordPending && setPasswordDialogOpen(false)} aria-label="Close"><X aria-hidden="true" /></button></div><form className="resident-password-form" onSubmit={changePassword}><label>Current password<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required autoFocus /></label><label>New password<input type="password" autoComplete="new-password" minLength={8} maxLength={128} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /></label><label>Confirm new password<input type="password" autoComplete="new-password" minLength={8} maxLength={128} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} required /></label>{passwordError ? <p className="resident-form-error" role="alert">{passwordError}</p> : null}{passwordSuccess ? <p className="resident-form-success" role="status">{passwordSuccess}</p> : null}<button className="resident-primary-button" type="submit" disabled={passwordPending}>{passwordPending ? "Changing password…" : "Change password"}</button></form></section></div> : null}
     </main>
