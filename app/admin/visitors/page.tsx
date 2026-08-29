@@ -7,7 +7,7 @@ import { formatGateyDateTime } from "@/lib/date-time";
 import { managedVisitorPins } from "@/lib/db";
 import { managedGateyVisitorIds } from "@/lib/gate-codes";
 import { listHouseholds } from "@/lib/households";
-import { listVisitorInventory } from "@/lib/unifi-access";
+import { getUnifiInventorySnapshot } from "@/lib/unifi-inventory-cache";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,9 +24,7 @@ export default async function VisitorsPage() {
   const assignments = listVisitorHouseholds();
   const pins = managedVisitorPins();
   const gateyVisitors = managedGateyVisitorIds();
-  let visitors: Awaited<ReturnType<typeof listVisitorInventory>> = [];
-  let errorMessage: string | undefined;
-  try { visitors = await listVisitorInventory(); } catch (error) { errorMessage = error instanceof Error ? error.message : "Could not read UniFi Access."; }
+  const { visitors, lastError: errorMessage } = getUnifiInventorySnapshot();
   const currentVisitors = visitors.filter((visitor) => {
     const archived = ["CANCELLED", "NO_VISIT", "EXPIRED", "REVOKED"].includes(visitor.status.toUpperCase());
     const interruptedMigration = visitor.status.toUpperCase() === "CANCELLED" && visitor.hasPin && assignments.has(visitor.id) && !gateyVisitors.has(visitor.id);
@@ -36,7 +34,7 @@ export default async function VisitorsPage() {
   const usage = listActorUsageSummaries(currentVisitors.map((visitor) => visitor.id));
 
   return <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-medium text-muted-foreground">Time-bound access</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Visitors</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">Assign every current UniFi visitor pass to the household that owns it.</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-900">{unassignedCount} unassigned</span></div>
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-medium text-muted-foreground">Time-bound access</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Visitors</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">Assign every current UniFi visitor pass to the household that owns it.</p></div><span data-inventory-kind="visitors" className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-900">{unassignedCount} unassigned</span></div>
     {errorMessage ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{errorMessage}</div> : null}
     <div className="admin-table-shell"><Table><TableHeader><TableRow><TableHead>Visitor</TableHead><TableHead>Household</TableHead><TableHead>Schedule</TableHead><TableHead>Recent use</TableHead><TableHead>Credentials</TableHead><TableHead className="admin-actions-head">Assignment</TableHead><TableHead>PIN</TableHead></TableRow></TableHeader><TableBody>
       {currentVisitors.map((visitor) => {
@@ -44,7 +42,7 @@ export default async function VisitorsPage() {
         const pin = pins.get(visitor.id);
         const isGateyManaged = gateyVisitors.has(visitor.id);
         const visitorUsage = usage.get(visitor.id);
-        return <TableRow key={visitor.id}>
+        return <TableRow key={visitor.id} data-inventory-kind="visitors">
           <TableCell><strong>{visitor.name}</strong><span className={`inventory-status ${visitor.status.toLowerCase()}`}>{labelStatus(visitor.status)}</span></TableCell>
           <TableCell>{assignment ? <span className="managed-badge">{assignment.householdName}</span> : <span className="existing-badge">Unassigned</span>}</TableCell>
           <TableCell><span className="block">{visitor.recurring ? "Recurring" : "One time"}</span><span className="mt-1 block text-xs text-muted-foreground">{formatDate(visitor.startsAt)} – {formatDate(visitor.endsAt)}</span></TableCell>

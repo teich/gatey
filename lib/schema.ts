@@ -302,3 +302,15 @@ export const unifiAccessSyncState = table("unifi_access_sync_state", {
   lastError: text().notNull().default(""),
   updatedAt: text().notNull(),
 }, (t) => [check("unifi_access_sync_state_singleton_check", sql`${t.id} = 1`)]);
+
+export const unifiInventorySnapshot = table("unifi_inventory_snapshot", {
+  id: integer().primaryKey(),
+  usersJson: text().notNull().default("[]"),
+  visitorsJson: text().notNull().default("[]"),
+  version: integer().notNull().default(0),
+  lastAttemptedAt: text(),
+  lastSucceededAt: text(),
+  lastChangedAt: text(),
+  lastError: text().notNull().default(""),
+  updatedAt: text().notNull(),
+}, (t) => [check("unifi_inventory_snapshot_singleton_check", sql`${t.id} = 1`)]);

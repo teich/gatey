@@ -1,5 +1,6 @@
 import { AppSidebar } from "@/app/admin/app-sidebar";
 import { AdminTopbar } from "@/app/admin/admin-topbar";
+import { AdminInventoryRefresh } from "@/app/admin/admin-inventory-refresh";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { requirePageAdmin } from "@/lib/authorization";
@@ -13,6 +14,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   return (
     <TooltipProvider>
       <SidebarProvider>
+        <AdminInventoryRefresh />
         <AppSidebar userName={context.session.user.name} />
         <SidebarInset>
           <AdminTopbar />

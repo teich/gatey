@@ -260,6 +260,23 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .admin-assignment-dialog { width: min(100% - 32px, 560px); }
 
+@keyframes admin-inventory-refreshed {
+  0% { background-color: rgba(92, 176, 111, .3); }
+  100% { background-color: transparent; }
+}
+
+.admin-users-refreshed [data-inventory-kind="users"],
+.admin-visitors-refreshed [data-inventory-kind="visitors"] {
+  animation: admin-inventory-refreshed 1.5s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-users-refreshed [data-inventory-kind="users"],
+  .admin-visitors-refreshed [data-inventory-kind="visitors"] {
+    animation: none;
+  }
+}
+
 /* Resident gate control */
 .resident-shell {
   width: min(100%, 580px);
