@@ -26,10 +26,12 @@ function actionLabel(event: AuditEvent) {
 function detailLabel(event: AuditEvent) {
   if (event.outcome === "failed") return "Controller request failed";
   if (event.action === "gate.open") {
-    if (event.details.state === "open") return "Gate reported open";
-    if (event.details.state === "opening") return "Gate reported opening";
-    return "Controller accepted the open request";
+    const source = event.details.source === "twilio" ? " by phone" : "";
+    if (event.details.state === "open") return `Gate reported open${source}`;
+    if (event.details.state === "opening") return `Gate reported opening${source}`;
+    return `Controller accepted the open request${source}`;
   }
+  if (event.action === "party.enabled" && event.details.source === "twilio") return "30-minute phone hold";
   if (event.details.startsAt && event.details.endsAt) return `${formatDate(event.details.startsAt)} – ${formatDate(event.details.endsAt)}`;
   if (event.details.label) return event.details.label;
   return "—";

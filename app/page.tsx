@@ -14,6 +14,7 @@ export default async function HomePage() {
       userName={session.user.name}
       isSystemAdmin={isSystemAdmin}
       camerasConfigured={camerasConfigured()}
+      gatePhoneNumber={process.env.TWILIO_PHONE_NUMBER || ""}
     />
   );
 }

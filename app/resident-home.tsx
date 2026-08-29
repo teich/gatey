@@ -19,6 +19,7 @@ import {
   LogOut,
   PartyPopper,
   Plus,
+  Phone,
   RefreshCw,
   Settings,
   Share2,
@@ -234,11 +235,13 @@ export function ResidentHome({
   userName,
   isSystemAdmin,
   camerasConfigured,
+  gatePhoneNumber,
 }: {
   householdName: string;
   userName: string;
   isSystemAdmin: boolean;
   camerasConfigured: boolean;
+  gatePhoneNumber: string;
 }) {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>("gate");
@@ -755,6 +758,7 @@ export function ResidentHome({
 
       {screen === "more" ? <section className="resident-page" aria-labelledby="more-title">
         <div className="resident-page-heading"><p className="resident-kicker">Gatey</p><h1 id="more-title">More</h1><p>Phone setup and account settings.</p></div>
+        {gatePhoneNumber ? <a className="resident-install-card" href={`tel:${gatePhoneNumber}`}><div className="resident-feature-icon"><Phone aria-hidden="true" /></div><div><p className="resident-kicker">Call-to-open</p><h2>{gatePhoneNumber}</h2><p>Call from a phone number authorized by your Gatey administrator.</p></div></a> : null}
         <section className="resident-install-card"><div className="resident-feature-icon"><Plus aria-hidden="true" /></div><div><p className="resident-kicker">Faster next time</p><h2>Add Gatey to your home screen</h2><p>On iPhone, tap Share, then “Add to Home Screen.” On Android, open the browser menu and tap “Add to Home screen.”</p></div></section>
         <section className="resident-settings-list">
           <div className="resident-settings-person"><span>{userName.slice(0, 1).toUpperCase()}</span><div><strong>{userName}</strong><small>{householdName}</small></div></div>

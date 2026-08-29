@@ -189,7 +189,7 @@ export async function getGateStatus(options: { fresh?: boolean } = {}): Promise<
   return statusRequest;
 }
 
-export async function unlockGate(actor: { id: string; name: string }): Promise<GateStatus> {
+export async function unlockGate(actor: { id: string; name: string; source?: "gatey" | "twilio-voice"; extra?: Record<string, string> }): Promise<GateStatus> {
   const door = await gateDoor();
   if (door.is_bind_hub === false) throw new Error("UniFi cannot remotely open this gate because it is not connected to a hub.");
 
@@ -199,7 +199,7 @@ export async function unlockGate(actor: { id: string; name: string }): Promise<G
     body: JSON.stringify({
       actor_id: actor.id,
       actor_name: actor.name.slice(0, 120),
-      extra: { source: "gatey" },
+      extra: { source: actor.source || "gatey", ...(actor.extra || {}) },
     }),
   });
 

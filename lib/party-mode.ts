@@ -197,6 +197,55 @@ export async function schedulePartyMode(input: {
   return party;
 }
 
+export async function startPhoneHold(input: {
+  endsAt: Date;
+  householdId: string;
+  householdName: string;
+  actorUserId: string;
+  actorName: string;
+}): Promise<{ party: PartyMode; alreadyActive: boolean }> {
+  const now = new Date();
+  if (input.endsAt <= now) throw new PartyModeValidationError("The phone hold must end in the future.");
+
+  const existing = await reconcilePartyMode();
+  if (existing) {
+    if (existing.state === "active") return { party: existing, alreadyActive: true };
+    throw new PartyModeConflictError(`${existing.householdName} already scheduled party mode.`);
+  }
+  const unresolved = currentRow();
+  if (unresolved && unresolved.state === "starting") {
+    throw new PartyModeConflictError("Another gate hold is already being processed.");
+  }
+
+  const timestamp = now.toISOString();
+  database.prepare(`
+    INSERT INTO party_mode (id, state, starts_at, ends_at, household_id, household_name, actor_user_id, actor_name, created_at, updated_at)
+    VALUES (1, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      state = excluded.state,
+      starts_at = excluded.starts_at,
+      ends_at = excluded.ends_at,
+      household_id = excluded.household_id,
+      household_name = excluded.household_name,
+      actor_user_id = excluded.actor_user_id,
+      actor_name = excluded.actor_name,
+      created_at = excluded.created_at,
+      updated_at = excluded.updated_at
+  `).run(timestamp, input.endsAt.toISOString(), input.householdId, input.householdName, input.actorUserId, input.actorName.slice(0, 160), timestamp, timestamp);
+
+  try {
+    await holdGateOpenUntil(input.endsAt);
+    updatePartyState("active");
+    armPartyTimer(currentRow());
+    const party = asPartyMode(currentRow());
+    if (!party) throw new Error("Gatey did not retain the phone hold.");
+    return { party, alreadyActive: false };
+  } catch (error) {
+    updatePartyState("failed");
+    throw error;
+  }
+}
+
 export async function endPartyMode(input: { householdId: string; isSystemAdmin: boolean }) {
   const party = await reconcilePartyMode();
   if (!party) throw new PartyModeValidationError("There is no current party mode to end.");
