@@ -65,36 +65,6 @@ export function listHouseholdPermanentCodes(householdId: string): HouseholdPerma
     .orderBy(asc(personPins.replacedAt), sql`${personPins.label} collate nocase`).all();
 }
 
-export function insertCredential(householdId: string, credential: Credential, controllerVisitorId: string) {
-  const createdAt = new Date().toISOString();
-  database.transaction((tx) => {
-    tx.insert(credentials).values({
-      id: credential.id,
-      householdId,
-      label: credential.label,
-      pin: credential.pin,
-      startsAt: credential.startsAt,
-      endsAt: credential.endsAt,
-      controllerVisitorId,
-      state: credential.state,
-      revokedAt: credential.revokedAt ?? null,
-      createdAt,
-    }).run();
-    tx.insert(visitorHouseholds).values({ controllerVisitorId, householdId, assignedAt: createdAt })
-      .onConflictDoUpdate({ target: visitorHouseholds.controllerVisitorId, set: { householdId } }).run();
-  }, { behavior: "immediate" });
-}
-
-export function getControllerVisitorId(householdId: string, id: string): string | undefined {
-  return database.select({ controllerVisitorId: credentials.controllerVisitorId }).from(credentials)
-    .where(and(eq(credentials.id, id), eq(credentials.householdId, householdId))).get()?.controllerVisitorId;
-}
-
-export function managedVisitorIds(): Set<string> {
-  const rows = database.select({ controllerVisitorId: credentials.controllerVisitorId }).from(credentials).all();
-  return new Set(rows.map((row) => row.controllerVisitorId));
-}
-
 export function managedVisitorPins(): Map<string, string> {
   const rows = [
     ...database.select({ id: credentials.controllerVisitorId, pin: credentials.pin }).from(credentials).all(),
@@ -122,9 +92,4 @@ export function managedPersonPins(): Map<string, string> {
 export function savePersonPin(input: { householdId: string; userId: string; label: string; pin: string }) {
   const values = { controllerUserId: input.userId, householdId: input.householdId, label: input.label, pin: input.pin, replacedAt: new Date().toISOString() };
   database.insert(personPins).values(values).onConflictDoUpdate({ target: personPins.controllerUserId, set: values }).run();
-}
-
-export function markRevoked(householdId: string, id: string) {
-  database.update(credentials).set({ state: "revoked", revokedAt: new Date().toISOString() })
-    .where(and(eq(credentials.id, id), eq(credentials.householdId, householdId))).run();
 }

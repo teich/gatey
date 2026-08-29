@@ -44,8 +44,10 @@ type CodeState = "active" | "upcoming" | "expired" | "revoked";
 type Screen = "gate" | "codes" | "more" | "create" | "success";
 type GateState = "closed" | "opening" | "open" | "unknown";
 type CameraView = "person" | "road";
+type CameraRefresh = { revision: number; pending: Set<CameraView>; loaded: boolean; refreshing: boolean };
 
 const INSTALL_CARD_DISMISSED_KEY = "gatey.install-card-dismissed";
+const CAMERA_VIEWS: CameraView[] = ["person", "road"];
 
 type GuestCode = {
   id: string;
@@ -235,29 +237,27 @@ function CameraSnapshot({
   label,
   revision,
   configured,
-  onLoad,
-  onError,
+  onSettled,
 }: {
   camera: CameraView;
   label: string;
   revision: number;
   configured: boolean;
-  onLoad: () => void;
-  onError: () => void;
+  onSettled: (camera: CameraView, revision: number, loaded: boolean) => void;
 }) {
   if (!configured) return null;
 
-  return <CameraSnapshotImage key={`${camera}-${revision}`} camera={camera} label={label} revision={revision} onLoad={onLoad} onError={onError} />;
+  return <CameraSnapshotImage key={`${camera}-${revision}`} camera={camera} label={label} revision={revision} onSettled={onSettled} />;
 }
 
-function CameraSnapshotImage({ camera, label, revision, onLoad, onError }: { camera: CameraView; label: string; revision: number; onLoad: () => void; onError: () => void }) {
+function CameraSnapshotImage({ camera, label, revision, onSettled }: { camera: CameraView; label: string; revision: number; onSettled: (camera: CameraView, revision: number, loaded: boolean) => void }) {
   const [available, setAvailable] = useState(true);
 
   if (!available) return <em className="resident-camera-unavailable">Camera unavailable</em>;
 
   // This same-origin image request carries the resident's session cookie; Next's image optimizer cannot.
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="resident-camera-image" src={`/api/cameras/${camera}/snapshot?refresh=${revision}`} alt={`Latest ${label.toLowerCase()} camera snapshot`} onLoad={onLoad} onError={() => { setAvailable(false); onError(); }} />;
+  return <img className="resident-camera-image" src={`/api/cameras/${camera}/snapshot?refresh=${revision}`} alt={`Latest ${label.toLowerCase()} camera snapshot`} onLoad={() => onSettled(camera, revision, true)} onError={() => { setAvailable(false); onSettled(camera, revision, false); }} />;
 }
 
 export function ResidentHome({
@@ -288,6 +288,8 @@ export function ResidentHome({
   const [cameraUpdatedAt, setCameraUpdatedAt] = useState(() => new Date());
   const [cameraRefreshing, setCameraRefreshing] = useState(false);
   const [cameraRevision, setCameraRevision] = useState(0);
+  const cameraRefresh = useRef<CameraRefresh>({ revision: 0, pending: new Set(CAMERA_VIEWS), loaded: false, refreshing: false });
+  const cameraRefreshTimer = useRef<number | undefined>(undefined);
   const lastResumeRefresh = useRef(0);
   const [expandedCamera, setExpandedCamera] = useState<CameraView | null>(null);
   const [party, setParty] = useState<PartyMode | null>(null);
@@ -312,7 +314,8 @@ export function ResidentHome({
   const [expirePending, setExpirePending] = useState(false);
   const [expireError, setExpireError] = useState("");
   const [pastOpen, setPastOpen] = useState(false);
-  const [error, setError] = useState("");
+  const [codesError, setCodesError] = useState("");
+  const [createError, setCreateError] = useState("");
 
   const [codeDialog, setCodeDialog] = useState<"household" | "person" | null>(null);
   const [codeTargetId, setCodeTargetId] = useState("");
@@ -343,13 +346,13 @@ export function ResidentHome({
       .filter((code) => !managedPins.has(code.pin))
       .map((code) => ({ ...code, kind: "person" }));
     setPermanentCodes([...managedPermanentCodes, ...existingPersonCodes]);
-    setError("");
+    setCodesError("");
   }, [storedPermanentCodes]);
 
   useEffect(() => {
     const initialFetch = window.setTimeout(() => {
       void refreshCodes()
-        .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your gate codes."))
+        .catch((caught) => setCodesError(caught instanceof Error ? caught.message : "Could not load your gate codes."))
         .finally(() => setReady(true));
     }, 0);
     return () => window.clearTimeout(initialFetch);
@@ -386,19 +389,32 @@ export function ResidentHome({
   }, []);
 
   const refreshCameras = useCallback(() => {
-    if (!camerasConfigured) return;
+    if (!camerasConfigured || cameraRefresh.current.refreshing) return;
+    const nextRevision = cameraRefresh.current.revision + 1;
+    cameraRefresh.current = { revision: nextRevision, pending: new Set(CAMERA_VIEWS), loaded: false, refreshing: true };
     setCameraRefreshing(true);
-    setCameraRevision((revision) => revision + 1);
+    setCameraRevision(nextRevision);
+    window.clearTimeout(cameraRefreshTimer.current);
+    cameraRefreshTimer.current = window.setTimeout(() => {
+      if (cameraRefresh.current.revision !== nextRevision) return;
+      cameraRefresh.current.refreshing = false;
+      setCameraRefreshing(false);
+    }, 20_000);
   }, [camerasConfigured]);
 
-  const cameraLoaded = useCallback(() => {
-    setCameraUpdatedAt(new Date());
+  const cameraSettled = useCallback((camera: CameraView, revision: number, loaded: boolean) => {
+    const refresh = cameraRefresh.current;
+    if (refresh.revision !== revision || !refresh.pending.has(camera)) return;
+    refresh.pending.delete(camera);
+    refresh.loaded ||= loaded;
+    if (refresh.pending.size > 0) return;
+    if (refresh.loaded) setCameraUpdatedAt(new Date());
+    refresh.refreshing = false;
+    window.clearTimeout(cameraRefreshTimer.current);
     setCameraRefreshing(false);
   }, []);
 
-  const cameraLoadFailed = useCallback(() => {
-    setCameraRefreshing(false);
-  }, []);
+  useEffect(() => () => window.clearTimeout(cameraRefreshTimer.current), []);
 
   useEffect(() => {
     const initialFetch = window.setTimeout(() => {
@@ -430,7 +446,7 @@ export function ResidentHome({
 
       setNow(currentTime);
       refreshCameras();
-      void refreshCodes().catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your gate codes."));
+      void refreshCodes().catch((caught) => setCodesError(caught instanceof Error ? caught.message : "Could not load your gate codes."));
       void refreshGate().catch((caught) => setGateError(caught instanceof Error ? caught.message : "Gate status is unavailable."));
       void refreshParty().catch((caught) => setPartyLoadError(caught instanceof Error ? caught.message : "Party mode is unavailable."));
       router.refresh();
@@ -563,7 +579,7 @@ export function ResidentHome({
     setDuration("today");
     setCustomStart(gateyDateTimeInputValue(current));
     setCustomEnd(gateyDateTimeInputValue(gateyEndOfDay(current)));
-    setError("");
+    setCreateError("");
     setScreen("create");
   }
 
@@ -587,11 +603,11 @@ export function ResidentHome({
       startsAt = dateFromGateyDateTimeInput(customStart);
       endsAt = dateFromGateyDateTimeInput(customEnd);
       if (!customStart || !customEnd || Number.isNaN(startsAt.valueOf()) || Number.isNaN(endsAt.valueOf())) {
-        setError("Choose both a start and end time.");
+        setCreateError("Choose both a start and end time.");
         return;
       }
       if (endsAt <= startsAt) {
-        setError("The end time needs to be after the start time.");
+        setCreateError("The end time needs to be after the start time.");
         return;
       }
     }
@@ -608,7 +624,7 @@ export function ResidentHome({
       setCreatedCode(result.code);
       setScreen("success");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not create the code.");
+      setCreateError(caught instanceof Error ? caught.message : "Could not create the code.");
     }
   }
 
@@ -640,7 +656,7 @@ export function ResidentHome({
       setGuestCodes((current) => current.map((code) => code.id === cancelTarget.id ? { ...code, revokedAt: new Date().toISOString() } : code));
       setCancelTarget(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not cancel the guest code.");
+      setCodesError(caught instanceof Error ? caught.message : "Could not cancel the guest code.");
       setCancelTarget(null);
     }
   }
@@ -789,7 +805,7 @@ export function ResidentHome({
           </fieldset>
 
           {duration === "custom" ? <div className="resident-custom-dates"><label>Starts<input type="datetime-local" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label>Ends<input type="datetime-local" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div> : null}
-          {error ? <p className="resident-form-error" role="alert">{error}</p> : null}
+          {createError ? <p className="resident-form-error" role="alert">{createError}</p> : null}
           <button className="resident-primary-button resident-form-submit" type="submit">Create guest code</button>
           <p className="resident-form-note">The code will be created at the gate and saved here for your household.</p>
         </form>
@@ -825,8 +841,8 @@ export function ResidentHome({
       {screen === "gate" ? <>
         <section className="resident-section resident-camera-section" aria-label="Gate camera snapshots">
           <div className="resident-camera-grid">
-            <button className="resident-camera" type="button" onClick={() => setExpandedCamera("person")} aria-label="Enlarge person camera snapshot"><CameraSnapshot camera="person" label="Person" revision={cameraRevision} configured={camerasConfigured} onLoad={cameraLoaded} onError={cameraLoadFailed} /><span><Camera aria-hidden="true" />Person</span></button>
-            <button className="resident-camera" type="button" onClick={() => setExpandedCamera("road")} aria-label="Enlarge road camera snapshot"><CameraSnapshot camera="road" label="Road" revision={cameraRevision} configured={camerasConfigured} onLoad={cameraLoaded} onError={cameraLoadFailed} /><span><Camera aria-hidden="true" />Road</span></button>
+            <button className="resident-camera" type="button" onClick={() => setExpandedCamera("person")} aria-label="Enlarge person camera snapshot"><CameraSnapshot camera="person" label="Person" revision={cameraRevision} configured={camerasConfigured} onSettled={cameraSettled} /><span><Camera aria-hidden="true" />Person</span></button>
+            <button className="resident-camera" type="button" onClick={() => setExpandedCamera("road")} aria-label="Enlarge road camera snapshot"><CameraSnapshot camera="road" label="Road" revision={cameraRevision} configured={camerasConfigured} onSettled={cameraSettled} /><span><Camera aria-hidden="true" />Road</span></button>
           </div>
           <div className="resident-camera-meta"><p className="resident-camera-time">Refreshed {formatTime(cameraUpdatedAt)}</p><button className="resident-refresh-button" type="button" onClick={refreshCameras} disabled={cameraRefreshing}><RefreshCw className={cameraRefreshing ? "spinning" : ""} aria-hidden="true" />{cameraRefreshing ? "Refreshing" : "Refresh"}</button></div>
         </section>
@@ -889,7 +905,7 @@ export function ResidentHome({
             {grouped.active.length || grouped.upcoming.length ? <div className="resident-guest-list">{[...grouped.active, ...grouped.upcoming].map((code) => <GuestCodeCard key={code.id} code={code} copied={copiedId === code.id} onCopy={copyCode} onShare={shareCode} onCancel={setCancelTarget} />)}</div> : <div className="resident-empty-compact"><Clock3 aria-hidden="true" /><span>No active guest codes.</span></div>}
             {grouped.past.length ? <><button className="resident-past-toggle" type="button" onClick={() => setPastOpen((open) => !open)} aria-expanded={pastOpen}><span>Past codes ({grouped.past.length})</span><ChevronDown className={pastOpen ? "rotated" : ""} aria-hidden="true" /></button>{pastOpen ? <div className="resident-guest-list resident-past-list">{grouped.past.map((code) => <GuestCodeCard key={code.id} code={code} copied={copiedId === code.id} onCopy={copyCode} onShare={shareCode} />)}</div> : null}</> : null}
           </>}
-          {error ? <p className="resident-form-error" role="alert">{error}</p> : null}
+          {codesError ? <p className="resident-form-error" role="alert">{codesError}</p> : null}
         </section>
       </section> : null}
 
@@ -911,7 +927,7 @@ export function ResidentHome({
         <button className={screen === "more" ? "active" : ""} type="button" onClick={() => setScreen("more")}><Settings aria-hidden="true" /><span>More</span></button>
       </nav>
 
-      {expandedCamera ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog resident-camera-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Camera snapshot</p><h2 id="camera-dialog-title">{expandedCamera === "person" ? "Person at the call box" : "Road-facing camera"}</h2></div><button type="button" onClick={() => setExpandedCamera(null)} aria-label="Close"><X aria-hidden="true" /></button></div><div className={`resident-camera-large resident-camera-${expandedCamera}`}><CameraSnapshot camera={expandedCamera} label={expandedCamera === "person" ? "Person" : "Road"} revision={cameraRevision} configured={camerasConfigured} onLoad={cameraLoaded} onError={cameraLoadFailed} /></div><div className="resident-camera-dialog-footer"><span>Refreshed {formatTime(cameraUpdatedAt)}</span><button className="resident-secondary-button" type="button" onClick={refreshCameras}><RefreshCw className={cameraRefreshing ? "spinning" : ""} aria-hidden="true" />Refresh</button></div></section></div> : null}
+      {expandedCamera ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog resident-camera-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Camera snapshot</p><h2 id="camera-dialog-title">{expandedCamera === "person" ? "Person at the call box" : "Road-facing camera"}</h2></div><button type="button" onClick={() => setExpandedCamera(null)} aria-label="Close"><X aria-hidden="true" /></button></div><div className={`resident-camera-large resident-camera-${expandedCamera}`}><CameraSnapshot camera={expandedCamera} label={expandedCamera === "person" ? "Person" : "Road"} revision={cameraRevision} configured={camerasConfigured} onSettled={cameraSettled} /></div><div className="resident-camera-dialog-footer"><span>Refreshed {formatTime(cameraUpdatedAt)}</span><button className="resident-secondary-button" type="button" onClick={refreshCameras} disabled={cameraRefreshing}><RefreshCw className={cameraRefreshing ? "spinning" : ""} aria-hidden="true" />{cameraRefreshing ? "Refreshing" : "Refresh"}</button></div></section></div> : null}
 
       {partyDialogOpen ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="party-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Today only</p><h2 id="party-dialog-title">Set up party mode</h2></div><button type="button" disabled={partyPending} onClick={() => setPartyDialogOpen(false)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">The gate will stay open so guests can drive in freely.</p><form onSubmit={(event) => void saveParty(event)}><fieldset className="resident-choice-fieldset" disabled={partyPending}><legend>Starts</legend><label className={partyStartChoice === "now" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "now"} onChange={() => setPartyStartChoice("now")} /><strong>Now</strong><span>Open the gate right away</span></label><label className={partyStartChoice === "later" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "later"} onChange={() => setPartyStartChoice("later")} /><strong>Later today</strong><span>Choose a starting time</span></label></fieldset>{partyStartChoice === "later" ? <label className="resident-time-field">Gate opens<input type="time" value={partyStartTime} onChange={(event) => setPartyStartTime(event.target.value)} required disabled={partyPending} /></label> : null}<label className="resident-time-field">Gate closes<input type="time" value={partyEndTime} onChange={(event) => setPartyEndTime(event.target.value)} required disabled={partyPending} /></label>{partyError ? <p className="resident-form-error" role="alert">{partyError}</p> : null}<button className="resident-primary-button" type="submit" disabled={partyPending}>{partyPending ? "Setting up…" : partyStartChoice === "now" ? "Start party mode" : "Schedule party mode"}</button></form></section></div> : null}
 

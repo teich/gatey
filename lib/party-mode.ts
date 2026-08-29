@@ -26,6 +26,7 @@ export class PartyModeValidationError extends Error {}
 const globalForPartyMode = globalThis as unknown as {
   gateyPartyTimer?: ReturnType<typeof setTimeout>;
 };
+const STARTING_RECOVERY_DELAY_MS = 30_000;
 
 function currentRow(): PartyRow | undefined {
   return database.select().from(partyMode).where(eq(partyMode.id, 1)).get();
@@ -52,9 +53,13 @@ function isToday(date: Date, now: Date) {
 
 function armPartyTimer(row = currentRow()) {
   if (globalForPartyMode.gateyPartyTimer) clearTimeout(globalForPartyMode.gateyPartyTimer);
-  if (!row || !["scheduled", "active"].includes(row.state)) return;
+  if (!row || !["scheduled", "starting", "active"].includes(row.state)) return;
 
-  const target = row.state === "scheduled" ? new Date(row.startsAt).getTime() : new Date(row.endsAt).getTime();
+  const target = row.state === "scheduled"
+    ? new Date(row.startsAt).getTime()
+    : row.state === "starting"
+      ? new Date(row.updatedAt).getTime() + STARTING_RECOVERY_DELAY_MS
+      : new Date(row.endsAt).getTime();
   const delay = Math.max(0, Math.min(target - Date.now(), 2_147_000_000));
   globalForPartyMode.gateyPartyTimer = setTimeout(() => void reconcilePartyMode(), delay);
 }
@@ -100,6 +105,49 @@ async function startDuePartyMode(row: PartyRow) {
   }
 }
 
+function claimStalledPartyStart(row: PartyRow) {
+  return database.transaction(() => {
+    const current = currentRow();
+    if (!current || current.state !== "starting" || current.updatedAt !== row.updatedAt) return false;
+    if (Date.now() - new Date(current.updatedAt).getTime() < STARTING_RECOVERY_DELAY_MS) return false;
+    updatePartyState("starting");
+    return true;
+  }, { behavior: "immediate" });
+}
+
+async function recoverStalledPartyStart(row: PartyRow) {
+  if (!claimStalledPartyStart(row)) return;
+
+  try {
+    await holdGateOpenUntil(new Date(row.endsAt));
+    updatePartyState("active");
+    try {
+      recordAuditEvent({
+        actorUserId: row.actorUserId,
+        actorName: row.actorName,
+        householdId: row.householdId,
+        householdName: row.householdName,
+        action: "party.started",
+        outcome: "succeeded",
+        details: { startsAt: row.startsAt, endsAt: row.endsAt, source: "recovery" },
+      });
+    } catch { /* The recovered controller hold is authoritative. */ }
+  } catch {
+    updatePartyState("failed");
+    try {
+      recordAuditEvent({
+        actorUserId: row.actorUserId,
+        actorName: row.actorName,
+        householdId: row.householdId,
+        householdName: row.householdName,
+        action: "party.started",
+        outcome: "failed",
+        details: { startsAt: row.startsAt, endsAt: row.endsAt, source: "recovery" },
+      });
+    } catch { /* Preserve the failed recovery result if logging is unavailable. */ }
+  }
+}
+
 export async function reconcilePartyMode(): Promise<PartyMode | null> {
   let row = currentRow();
   if (!row) return null;
@@ -125,6 +173,9 @@ export async function reconcilePartyMode(): Promise<PartyMode | null> {
     row = currentRow();
   } else if (row.state === "scheduled" && startsAt <= now) {
     await startDuePartyMode(row);
+    row = currentRow();
+  } else if (row.state === "starting") {
+    await recoverStalledPartyStart(row);
     row = currentRow();
   }
 

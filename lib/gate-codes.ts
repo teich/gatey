@@ -3,8 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { database } from "@/lib/database";
-import { gateCodes, visitorHouseholds } from "@/lib/schema";
-import { linkGateCodeActors, refreshGateCodeActorLabel } from "@/lib/access-history";
+import { gateCodes, unifiActorLinks, visitorHouseholds } from "@/lib/schema";
 
 export type GateCodeKind = "home" | "ongoing" | "temporary";
 export type GateCodeState = "active" | "disabled";
@@ -95,23 +94,45 @@ export function saveGateCode(input: {
     }).run();
     tx.insert(visitorHouseholds).values({ controllerVisitorId: input.controllerVisitorId, householdId: input.householdId, assignedAt: now })
       .onConflictDoUpdate({ target: visitorHouseholds.controllerVisitorId, set: { householdId: input.householdId, assignedAt: now } }).run();
+    const actors = [
+      { controllerActorId: input.controllerVisitorId, role: "current" as const, retiredAt: null },
+      ...(input.legacyControllerVisitorIds || [])
+        .filter((controllerActorId) => controllerActorId !== input.controllerVisitorId)
+        .map((controllerActorId) => ({ controllerActorId, role: "legacy" as const, retiredAt: now })),
+    ];
+    for (const actor of actors) {
+      const values = {
+        ...actor,
+        actorType: "visitor",
+        subjectType: "gate_code" as const,
+        subjectId: id,
+        householdId: input.householdId,
+        label: input.label,
+        linkedAt: now,
+      };
+      tx.insert(unifiActorLinks).values(values).onConflictDoUpdate({
+        target: unifiActorLinks.controllerActorId,
+        set: values,
+      }).run();
+    }
   }, { behavior: "immediate" });
-  linkGateCodeActors({
-    gateCodeId: id,
-    householdId: input.householdId,
-    label: input.label,
-    currentControllerActorId: input.controllerVisitorId,
-    legacyControllerActorIds: input.legacyControllerVisitorIds,
-  });
   return id;
 }
 
 export function updateGateCode(input: { householdId: string; id: string; label?: string; pin?: string }) {
   const existing = findGateCode(input.householdId, input.id);
   if (!existing) return undefined;
-  database.update(gateCodes).set({ label: input.label ?? existing.label, pin: input.pin ?? existing.pin, updatedAt: new Date().toISOString() })
-    .where(and(eq(gateCodes.id, input.id), eq(gateCodes.householdId, input.householdId))).run();
-  if (input.label !== undefined) refreshGateCodeActorLabel(input.id, input.householdId, input.label);
+  database.transaction((tx) => {
+    tx.update(gateCodes).set({ label: input.label ?? existing.label, pin: input.pin ?? existing.pin, updatedAt: new Date().toISOString() })
+      .where(and(eq(gateCodes.id, input.id), eq(gateCodes.householdId, input.householdId))).run();
+    if (input.label !== undefined) {
+      tx.update(unifiActorLinks).set({ label: input.label }).where(and(
+        eq(unifiActorLinks.subjectType, "gate_code"),
+        eq(unifiActorLinks.subjectId, input.id),
+        eq(unifiActorLinks.householdId, input.householdId),
+      )).run();
+    }
+  }, { behavior: "immediate" });
   return findGateCode(input.householdId, input.id);
 }
 

@@ -1,5 +1,5 @@
 import { hasGateCodePin, hasHomeCode, listGateCodes, saveGateCode, type GateCodeKind } from "@/lib/gate-codes";
-import { generateGateCodePin, provisionGateCode } from "@/lib/unifi-access";
+import { generateGateCodePin, provisionAndPersistGateCode } from "@/lib/unifi-access";
 import { authorizeHouseholdRequest } from "@/lib/api-authorization";
 import { recordAuditEvent } from "@/lib/audit-log";
 import { listGateCodeUsageSummaries } from "@/lib/access-history";
@@ -55,8 +55,10 @@ export async function POST(request: Request) {
     if (kind === "home" && hasHomeCode(householdId)) return Response.json({ error: "Your household already has a home code." }, { status: 409 });
     if (Number.isNaN(startsAt.valueOf()) || Number.isNaN(endsAt.valueOf()) || endsAt <= startsAt) return Response.json({ error: "Choose a valid time for this code." }, { status: 400 });
 
-    const { visitorId } = await provisionGateCode({ householdName: authorization.context.household.name, label, pin, startsAt, endsAt });
-    const id = saveGateCode({ householdId, label, pin, kind, startsAt: startsAt.toISOString(), ...(kind === "temporary" ? { endsAt: endsAt.toISOString() } : {}), controllerEndsAt: endsAt.toISOString(), controllerVisitorId: visitorId });
+    const { persisted: id } = await provisionAndPersistGateCode(
+      { householdName: authorization.context.household.name, label, pin, startsAt, endsAt },
+      (visitorId) => saveGateCode({ householdId, label, pin, kind, startsAt: startsAt.toISOString(), ...(kind === "temporary" ? { endsAt: endsAt.toISOString() } : {}), controllerEndsAt: endsAt.toISOString(), controllerVisitorId: visitorId }),
+    );
     const code = listGateCodes(householdId).find((item) => item.id === id)!;
     try {
       const { user } = authorization.context.session;

@@ -1,9 +1,7 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
 import { Agent, request as httpsRequest } from "node:https";
 import { eq } from "drizzle-orm";
-import type { Credential } from "@/lib/credentials";
 import { database } from "@/lib/database";
 import { unifiPersonLinks } from "@/lib/schema";
 
@@ -90,6 +88,7 @@ type UnifiUser = {
 
 const insecureUnifiAgent = new Agent({ rejectUnauthorized: false });
 const GATE_STATUS_TTL_MS = 5_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
 type CachedGateStatus = {
   value: GateStatus;
@@ -171,6 +170,7 @@ async function unifiFetch(url: string, init: RequestInit, insecureTls: boolean):
       method: init.method,
       headers: Object.fromEntries(new Headers(init.headers).entries()),
       agent: insecureUnifiAgent,
+      signal: init.signal ?? undefined,
     }, (response) => {
       const chunks: Uint8Array[] = [];
       response.on("data", (chunk: Uint8Array) => chunks.push(chunk));
@@ -188,8 +188,10 @@ async function unifiFetch(url: string, init: RequestInit, insecureTls: boolean):
 
 async function requestEnvelope<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
   const { baseUrl, token, insecureTls } = config();
+  const signal = init.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS);
   const response = await unifiFetch(`${baseUrl}${path}`, {
     ...init,
+    signal,
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(init.headers || {}) },
     cache: "no-store",
   }, insecureTls);
@@ -317,48 +319,6 @@ function allDaySchedule() {
   return Object.fromEntries(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].map((day) => [day, [{ start_time: "00:00:00", end_time: "23:59:59" }]]));
 }
 
-export async function provisionCredential(input: { label: string; startsAt: Date; endsAt: Date }): Promise<{ credential: Credential; visitorId: string }> {
-  assertControllerChangesAllowed();
-  const door = await gateDoor();
-  const visitor = await request<{ id: string }>("/visitors", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      first_name: input.label.slice(0, 80),
-      last_name: "Guest",
-      remarks: "Created by Gatey",
-      start_time: Math.floor(input.startsAt.getTime() / 1000),
-      end_time: Math.floor(input.endsAt.getTime() / 1000),
-      visit_reason: "Others",
-      week_schedule: allDaySchedule(),
-      resources: [{ id: door.id, type: "door" }],
-    }),
-  });
-
-  try {
-    const pin = await request<string>("/credentials/pin_codes", { method: "POST" });
-    await request<null>(`/visitors/${encodeURIComponent(visitor.id)}/pin_codes`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin_code: pin }),
-    });
-    return {
-      visitorId: visitor.id,
-      credential: {
-        id: randomUUID(),
-        label: input.label,
-        pin,
-        startsAt: input.startsAt.toISOString(),
-        endsAt: input.endsAt.toISOString(),
-        state: input.startsAt > new Date() ? "upcoming" : "active",
-      },
-    };
-  } catch (error) {
-    await request<null>(`/visitors/${encodeURIComponent(visitor.id)}`, { method: "DELETE" }).catch(() => undefined);
-    throw error;
-  }
-}
-
 export async function generateGateCodePin(): Promise<string> {
   assertControllerChangesAllowed();
   return request<string>("/credentials/pin_codes", { method: "POST" });
@@ -405,6 +365,24 @@ export async function provisionGateCode(input: { householdName: string; label: s
   } catch (error) {
     await removeVisitorPin(visitorId).catch(() => undefined);
     await request<null>(`/visitors/${encodeURIComponent(visitorId)}`, { method: "DELETE" }).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function provisionAndPersistGateCode<T>(
+  input: { householdName: string; label: string; pin: string; startsAt: Date; endsAt: Date },
+  persist: (visitorId: string) => T,
+): Promise<{ visitorId: string; persisted: T }> {
+  const { visitorId } = await provisionGateCode(input);
+  try {
+    return { visitorId, persisted: persist(visitorId) };
+  } catch (error) {
+    try {
+      await removeVisitorPin(visitorId);
+      await request<null>(`/visitors/${encodeURIComponent(visitorId)}`, { method: "DELETE" });
+    } catch (cleanupError) {
+      throw new Error(`Gatey could not save the new code or remove its UniFi visitor: ${cleanupError instanceof Error ? cleanupError.message : "Unknown cleanup error"}`, { cause: error });
+    }
     throw error;
   }
 }

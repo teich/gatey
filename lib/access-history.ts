@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { database, sqlite } from "@/lib/database";
 import { credentials, gateCodes, unifiAccessEvents, unifiAccessSyncState, unifiActorLinks } from "@/lib/schema";
 import { fetchAccessLogPage, getConfiguredGateIdentity } from "@/lib/unifi-access";
@@ -266,48 +266,6 @@ export function listGateCodeUsageSummaries(householdId: string, windowDays = USA
     order by events.occurred_at desc
   `).all(householdId, since) as unknown as UsageRow[];
   return summarizeUsage(rows, codeIds, windowDays);
-}
-
-export function linkGateCodeActors(input: {
-  gateCodeId: string;
-  householdId: string;
-  label: string;
-  currentControllerActorId: string;
-  legacyControllerActorIds?: string[];
-}) {
-  const now = new Date().toISOString();
-  const links = [
-    { id: input.currentControllerActorId, role: "current" as const },
-    ...(input.legacyControllerActorIds || []).filter((id) => id !== input.currentControllerActorId)
-      .map((id) => ({ id, role: "legacy" as const })),
-  ];
-  database.transaction((tx) => {
-    for (const link of links) {
-      const values = {
-        controllerActorId: link.id,
-        actorType: "visitor",
-        subjectType: "gate_code" as const,
-        subjectId: input.gateCodeId,
-        householdId: input.householdId,
-        label: input.label,
-        role: link.role,
-        linkedAt: now,
-        retiredAt: link.role === "legacy" ? now : null,
-      };
-      tx.insert(unifiActorLinks).values(values).onConflictDoUpdate({
-        target: unifiActorLinks.controllerActorId,
-        set: values,
-      }).run();
-    }
-  }, { behavior: "immediate" });
-}
-
-export function refreshGateCodeActorLabel(gateCodeId: string, householdId: string, label: string) {
-  database.update(unifiActorLinks).set({ label }).where(and(
-    eq(unifiActorLinks.subjectType, "gate_code"),
-    eq(unifiActorLinks.subjectId, gateCodeId),
-    eq(unifiActorLinks.householdId, householdId),
-  )).run();
 }
 
 export function seedExistingActorLinks() {

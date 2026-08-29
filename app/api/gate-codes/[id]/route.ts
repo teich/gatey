@@ -20,8 +20,22 @@ export async function PATCH(request: Request, context: RouteContext<"/api/gate-c
     if (label !== undefined && !label) return Response.json({ error: "Enter a name for this code." }, { status: 400 });
     if (pin !== undefined && !/^\d{4,6}$/.test(pin)) return Response.json({ error: "Use a 4 to 6 digit gate code." }, { status: 400 });
     if (pin && hasGateCodePin(pin, id)) return Response.json({ error: "This code is already used by another Gatey code." }, { status: 409 });
-    if (pin && pin !== code.pin) await replaceVisitorPin(code.controllerVisitorId, pin);
-    const updated = updateGateCode({ householdId, id, label, pin });
+    const controllerPinChanged = Boolean(pin && pin !== code.pin);
+    if (controllerPinChanged) await replaceVisitorPin(code.controllerVisitorId, pin);
+    let updated;
+    try {
+      updated = updateGateCode({ householdId, id, label, pin });
+      if (!updated) throw new Error("Gate code was removed while it was being updated.");
+    } catch (persistenceError) {
+      if (controllerPinChanged) {
+        try {
+          await replaceVisitorPin(code.controllerVisitorId, code.pin);
+        } catch (restoreError) {
+          throw new Error(`Gatey could not save the new PIN or restore the old UniFi PIN: ${restoreError instanceof Error ? restoreError.message : "Unknown restore error"}`, { cause: persistenceError });
+        }
+      }
+      throw persistenceError;
+    }
     return Response.json({ code: updated });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not update this gate code." }, { status: 424 });
