@@ -127,16 +127,6 @@ export async function getCameraSnapshot(camera: CameraName) {
       snapshots.set(camera, snapshot);
       return snapshot;
     })
-    .catch((error: unknown) => {
-      const staleSnapshot = snapshots.get(camera);
-      if (!staleSnapshot) throw error;
-
-      console.warn("Camera capture failed; serving the previous snapshot.", {
-        camera,
-        error: error instanceof Error ? error.message : "Unknown camera capture error.",
-      });
-      return staleSnapshot;
-    })
     .finally(() => captures.delete(camera));
   captures.set(camera, capture);
   return capture;

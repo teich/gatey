@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -235,25 +235,29 @@ function CameraSnapshot({
   label,
   revision,
   configured,
+  onLoad,
+  onError,
 }: {
   camera: CameraView;
   label: string;
   revision: number;
   configured: boolean;
+  onLoad: () => void;
+  onError: () => void;
 }) {
   if (!configured) return null;
 
-  return <CameraSnapshotImage key={`${camera}-${revision}`} camera={camera} label={label} revision={revision} />;
+  return <CameraSnapshotImage key={`${camera}-${revision}`} camera={camera} label={label} revision={revision} onLoad={onLoad} onError={onError} />;
 }
 
-function CameraSnapshotImage({ camera, label, revision }: { camera: CameraView; label: string; revision: number }) {
+function CameraSnapshotImage({ camera, label, revision, onLoad, onError }: { camera: CameraView; label: string; revision: number; onLoad: () => void; onError: () => void }) {
   const [available, setAvailable] = useState(true);
 
   if (!available) return <em className="resident-camera-unavailable">Camera unavailable</em>;
 
   // This same-origin image request carries the resident's session cookie; Next's image optimizer cannot.
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className="resident-camera-image" src={`/api/cameras/${camera}/snapshot?refresh=${revision}`} alt={`Latest ${label.toLowerCase()} camera snapshot`} onError={() => setAvailable(false)} />;
+  return <img className="resident-camera-image" src={`/api/cameras/${camera}/snapshot?refresh=${revision}`} alt={`Latest ${label.toLowerCase()} camera snapshot`} onLoad={onLoad} onError={() => { setAvailable(false); onError(); }} />;
 }
 
 export function ResidentHome({
@@ -284,6 +288,7 @@ export function ResidentHome({
   const [cameraUpdatedAt, setCameraUpdatedAt] = useState(() => new Date());
   const [cameraRefreshing, setCameraRefreshing] = useState(false);
   const [cameraRevision, setCameraRevision] = useState(0);
+  const lastResumeRefresh = useRef(0);
   const [expandedCamera, setExpandedCamera] = useState<CameraView | null>(null);
   const [party, setParty] = useState<PartyMode | null>(null);
   const [partyCanEnd, setPartyCanEnd] = useState(false);
@@ -325,26 +330,30 @@ export function ResidentHome({
   const [passwordSuccess, setPasswordSuccess] = useState("");
   const [passwordPending, setPasswordPending] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/gate-codes")
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Could not load your gate codes.");
-        return response.json() as Promise<{ codes: GateCodeResponse[] }>;
-      })
-      .then(({ codes }) => {
-        setGuestCodes(codes.filter((code) => code.kind === "temporary"));
-        const managedPermanentCodes: PermanentCode[] = codes
-          .filter((code) => code.kind !== "temporary" && code.state === "active")
-          .map((code) => ({ ...code, kind: code.kind === "home" ? "household" : "person", managedByGatey: true }));
-        const managedPins = new Set(managedPermanentCodes.map((code) => code.pin));
-        const existingPersonCodes: PermanentCode[] = storedPermanentCodes
-          .filter((code) => !managedPins.has(code.pin))
-          .map((code) => ({ ...code, kind: "person" }));
-        setPermanentCodes([...managedPermanentCodes, ...existingPersonCodes]);
-      })
-      .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your gate codes."))
-      .finally(() => setReady(true));
+  const refreshCodes = useCallback(async () => {
+    const response = await fetch("/api/gate-codes", { cache: "no-store" });
+    if (!response.ok) throw new Error("Could not load your gate codes.");
+    const { codes } = await response.json() as { codes: GateCodeResponse[] };
+    setGuestCodes(codes.filter((code) => code.kind === "temporary"));
+    const managedPermanentCodes: PermanentCode[] = codes
+      .filter((code) => code.kind !== "temporary" && code.state === "active")
+      .map((code) => ({ ...code, kind: code.kind === "home" ? "household" : "person", managedByGatey: true }));
+    const managedPins = new Set(managedPermanentCodes.map((code) => code.pin));
+    const existingPersonCodes: PermanentCode[] = storedPermanentCodes
+      .filter((code) => !managedPins.has(code.pin))
+      .map((code) => ({ ...code, kind: "person" }));
+    setPermanentCodes([...managedPermanentCodes, ...existingPersonCodes]);
+    setError("");
   }, [storedPermanentCodes]);
+
+  useEffect(() => {
+    const initialFetch = window.setTimeout(() => {
+      void refreshCodes()
+        .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your gate codes."))
+        .finally(() => setReady(true));
+    }, 0);
+    return () => window.clearTimeout(initialFetch);
+  }, [refreshCodes]);
 
   const refreshGate = useCallback(async () => {
     const response = await fetch("/api/gate", { cache: "no-store" });
@@ -376,6 +385,21 @@ export function ResidentHome({
     setPartyLoadError("");
   }, []);
 
+  const refreshCameras = useCallback(() => {
+    if (!camerasConfigured) return;
+    setCameraRefreshing(true);
+    setCameraRevision((revision) => revision + 1);
+  }, [camerasConfigured]);
+
+  const cameraLoaded = useCallback(() => {
+    setCameraUpdatedAt(new Date());
+    setCameraRefreshing(false);
+  }, []);
+
+  const cameraLoadFailed = useCallback(() => {
+    setCameraRefreshing(false);
+  }, []);
+
   useEffect(() => {
     const initialFetch = window.setTimeout(() => {
       void refreshParty().catch((caught) => setPartyLoadError(caught instanceof Error ? caught.message : "Party mode is unavailable."));
@@ -393,6 +417,46 @@ export function ResidentHome({
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const refreshLiveData = () => {
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+
+      const currentTime = Date.now();
+      // iOS can emit pageshow, visibilitychange, and focus together when restoring
+      // an installed web app. Coalesce them into one round of live requests.
+      if (currentTime - lastResumeRefresh.current < 1_000) return;
+      lastResumeRefresh.current = currentTime;
+
+      setNow(currentTime);
+      refreshCameras();
+      void refreshCodes().catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your gate codes."));
+      void refreshGate().catch((caught) => setGateError(caught instanceof Error ? caught.message : "Gate status is unavailable."));
+      void refreshParty().catch((caught) => setPartyLoadError(caught instanceof Error ? caught.message : "Party mode is unavailable."));
+      router.refresh();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshLiveData();
+    };
+
+    window.addEventListener("pageshow", refreshLiveData);
+    window.addEventListener("focus", refreshLiveData);
+    window.addEventListener("online", refreshLiveData);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pageshow", refreshLiveData);
+      window.removeEventListener("focus", refreshLiveData);
+      window.removeEventListener("online", refreshLiveData);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refreshCameras, refreshCodes, refreshGate, refreshParty, router]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine) refreshCameras();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [refreshCameras]);
 
   useEffect(() => {
     function hideAfterInstall() {
@@ -419,16 +483,6 @@ export function ResidentHome({
   const householdCode = permanentCodes.find((code) => code.kind === "household");
   const personalCodes = permanentCodes.filter((code) => code.kind === "person");
   const currentPartyPhase = partyPhase(party);
-
-  function refreshCameras() {
-    if (cameraRefreshing) return;
-    setCameraRefreshing(true);
-    setCameraRevision((revision) => revision + 1);
-    window.setTimeout(() => {
-      setCameraUpdatedAt(new Date());
-      setCameraRefreshing(false);
-    }, 700);
-  }
 
   async function openGate() {
     if (gateState !== "closed" || gateOpening) return;
@@ -771,8 +825,8 @@ export function ResidentHome({
       {screen === "gate" ? <>
         <section className="resident-section resident-camera-section" aria-label="Gate camera snapshots">
           <div className="resident-camera-grid">
-            <button className="resident-camera" type="button" onClick={() => setExpandedCamera("person")} aria-label="Enlarge person camera snapshot"><CameraSnapshot camera="person" label="Person" revision={cameraRevision} configured={camerasConfigured} /><span><Camera aria-hidden="true" />Person</span></button>
-            <button className="resident-camera" type="button" onClick={() => setExpandedCamera("road")} aria-label="Enlarge road camera snapshot"><CameraSnapshot camera="road" label="Road" revision={cameraRevision} configured={camerasConfigured} /><span><Camera aria-hidden="true" />Road</span></button>
+            <button className="resident-camera" type="button" onClick={() => setExpandedCamera("person")} aria-label="Enlarge person camera snapshot"><CameraSnapshot camera="person" label="Person" revision={cameraRevision} configured={camerasConfigured} onLoad={cameraLoaded} onError={cameraLoadFailed} /><span><Camera aria-hidden="true" />Person</span></button>
+            <button className="resident-camera" type="button" onClick={() => setExpandedCamera("road")} aria-label="Enlarge road camera snapshot"><CameraSnapshot camera="road" label="Road" revision={cameraRevision} configured={camerasConfigured} onLoad={cameraLoaded} onError={cameraLoadFailed} /><span><Camera aria-hidden="true" />Road</span></button>
           </div>
           <div className="resident-camera-meta"><p className="resident-camera-time">Refreshed {formatTime(cameraUpdatedAt)}</p><button className="resident-refresh-button" type="button" onClick={refreshCameras} disabled={cameraRefreshing}><RefreshCw className={cameraRefreshing ? "spinning" : ""} aria-hidden="true" />{cameraRefreshing ? "Refreshing" : "Refresh"}</button></div>
         </section>
@@ -857,7 +911,7 @@ export function ResidentHome({
         <button className={screen === "more" ? "active" : ""} type="button" onClick={() => setScreen("more")}><Settings aria-hidden="true" /><span>More</span></button>
       </nav>
 
-      {expandedCamera ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog resident-camera-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Camera snapshot</p><h2 id="camera-dialog-title">{expandedCamera === "person" ? "Person at the call box" : "Road-facing camera"}</h2></div><button type="button" onClick={() => setExpandedCamera(null)} aria-label="Close"><X aria-hidden="true" /></button></div><div className={`resident-camera-large resident-camera-${expandedCamera}`}><CameraSnapshot camera={expandedCamera} label={expandedCamera === "person" ? "Person" : "Road"} revision={cameraRevision} configured={camerasConfigured} /></div><div className="resident-camera-dialog-footer"><span>Refreshed {formatTime(cameraUpdatedAt)}</span><button className="resident-secondary-button" type="button" onClick={refreshCameras}><RefreshCw className={cameraRefreshing ? "spinning" : ""} aria-hidden="true" />Refresh</button></div></section></div> : null}
+      {expandedCamera ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog resident-camera-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Camera snapshot</p><h2 id="camera-dialog-title">{expandedCamera === "person" ? "Person at the call box" : "Road-facing camera"}</h2></div><button type="button" onClick={() => setExpandedCamera(null)} aria-label="Close"><X aria-hidden="true" /></button></div><div className={`resident-camera-large resident-camera-${expandedCamera}`}><CameraSnapshot camera={expandedCamera} label={expandedCamera === "person" ? "Person" : "Road"} revision={cameraRevision} configured={camerasConfigured} onLoad={cameraLoaded} onError={cameraLoadFailed} /></div><div className="resident-camera-dialog-footer"><span>Refreshed {formatTime(cameraUpdatedAt)}</span><button className="resident-secondary-button" type="button" onClick={refreshCameras}><RefreshCw className={cameraRefreshing ? "spinning" : ""} aria-hidden="true" />Refresh</button></div></section></div> : null}
 
       {partyDialogOpen ? <div className="resident-dialog-backdrop" role="presentation"><section className="resident-dialog" role="dialog" aria-modal="true" aria-labelledby="party-dialog-title"><div className="resident-dialog-heading"><div><p className="resident-kicker">Today only</p><h2 id="party-dialog-title">Set up party mode</h2></div><button type="button" disabled={partyPending} onClick={() => setPartyDialogOpen(false)} aria-label="Close"><X aria-hidden="true" /></button></div><p className="resident-dialog-intro">The gate will stay open so guests can drive in freely.</p><form onSubmit={(event) => void saveParty(event)}><fieldset className="resident-choice-fieldset" disabled={partyPending}><legend>Starts</legend><label className={partyStartChoice === "now" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "now"} onChange={() => setPartyStartChoice("now")} /><strong>Now</strong><span>Open the gate right away</span></label><label className={partyStartChoice === "later" ? "selected" : ""}><input type="radio" name="party-start" checked={partyStartChoice === "later"} onChange={() => setPartyStartChoice("later")} /><strong>Later today</strong><span>Choose a starting time</span></label></fieldset>{partyStartChoice === "later" ? <label className="resident-time-field">Gate opens<input type="time" value={partyStartTime} onChange={(event) => setPartyStartTime(event.target.value)} required disabled={partyPending} /></label> : null}<label className="resident-time-field">Gate closes<input type="time" value={partyEndTime} onChange={(event) => setPartyEndTime(event.target.value)} required disabled={partyPending} /></label>{partyError ? <p className="resident-form-error" role="alert">{partyError}</p> : null}<button className="resident-primary-button" type="submit" disabled={partyPending}>{partyPending ? "Setting up…" : partyStartChoice === "now" ? "Start party mode" : "Schedule party mode"}</button></form></section></div> : null}
 

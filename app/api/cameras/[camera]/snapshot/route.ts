@@ -17,7 +17,9 @@ export async function GET(request: Request, context: RouteContext<"/api/cameras/
       headers: {
         "Content-Type": "image/jpeg",
         "Content-Length": String(snapshot.image.length),
-        "Cache-Control": "private, no-store, max-age=0",
+        "Cache-Control": "private, no-store, no-cache, must-revalidate, max-age=0",
+        "Expires": "0",
+        "Pragma": "no-cache",
         "Vary": "Cookie",
         "X-Gatey-Captured-At": new Date(snapshot.capturedAt).toISOString(),
       },
