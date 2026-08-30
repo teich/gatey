@@ -47,7 +47,7 @@ export default async function VisitorsPage() {
           <TableCell>{assignment ? <span className="managed-badge">{assignment.householdName}</span> : <span className="existing-badge">Unassigned</span>}</TableCell>
           <TableCell><span className="block">{visitor.recurring ? "Recurring" : "One time"}</span><span className="mt-1 block text-xs text-muted-foreground">{formatDate(visitor.startsAt)} – {formatDate(visitor.endsAt)}</span></TableCell>
           <TableCell>{visitorUsage?.known ? <><strong>{visitorUsage.useCount} uses</strong><span className="mt-1 block text-xs text-muted-foreground">{visitorUsage.lastUsedAt ? `Last ${formatDate(visitorUsage.lastUsedAt)}` : `None in ${visitorUsage.usageWindowDays} days`}</span></> : <span className="text-muted-foreground">Not synced</span>}</TableCell>
-          <TableCell><span className="block">{visitor.hasPin ? "PIN assigned" : "No PIN"}</span>{pin ? <strong className="table-pin text-xs">Gatey {pin}</strong> : null}</TableCell>
+          <TableCell>{pin ? <strong className="table-pin block text-xl leading-none">{pin}</strong> : <span className="block">{visitor.hasPin ? "PIN assigned" : "No PIN"}</span>}</TableCell>
           <TableCell><VisitorAssignment visitorId={visitor.id} initialHouseholdId={assignment?.householdId} households={households} /></TableCell>
           <TableCell>{isGateyManaged ? <span className="managed-badge">Managed in Gatey</span> : <MigrateVisitorButton visitorId={visitor.id} visitorName={visitor.name} households={households} />}</TableCell>
         </TableRow>;
