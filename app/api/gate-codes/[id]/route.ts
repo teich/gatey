@@ -36,6 +36,10 @@ export async function PATCH(request: Request, context: RouteContext<"/api/gate-c
       }
       throw persistenceError;
     }
+    try {
+      const { user } = authorization.context.session;
+      recordAuditEvent({ actorUserId: user.id, actorName: user.name || "Gatey resident", householdId, householdName: authorization.context.household.name, action: "gate-code.updated", outcome: "succeeded", details: { label: updated.label, kind: updated.kind } });
+    } catch { /* The controller action has already succeeded. */ }
     return Response.json({ code: updated });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not update this gate code." }, { status: 424 });

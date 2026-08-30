@@ -4,6 +4,7 @@ import { assignPersonRecords, getPersonLink, linkUnifiPerson, listAssignableAcco
 import { getUserByEmail, getUserHousehold, listHouseholds } from "@/lib/households";
 import { listUserInventory } from "@/lib/unifi-access";
 import { buildWelcomeMessage, createTemporaryPassword } from "@/lib/welcome-message";
+import { managedAccountEmail, optionalAccountEmail } from "@/lib/account-email";
 
 export const runtime = "nodejs";
 
@@ -54,9 +55,10 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
     }
 
     const name = cleanText(body.name, "Person's name");
-    const email = cleanText(body.email, "Email", 3, 254).toLowerCase();
     const username = cleanText(body.username, "Username", 3, 64);
-    const existingUser = getUserByEmail(email);
+    const contactEmail = optionalAccountEmail(body.email);
+    const email = contactEmail || managedAccountEmail(username);
+    const existingUser = contactEmail ? getUserByEmail(contactEmail) : null;
     if (existingUser) {
       if (!listAssignableAccounts().some((item) => item.id === existingUser.id)) {
         return Response.json({ error: "That Gatey account is already linked to another UniFi person." }, { status: 409 });
@@ -69,7 +71,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
 
     const password = createTemporaryPassword();
     const created = await auth.api.createUser({
-      body: { email, password, name, role: "user", data: { username, emailVerified: true } },
+      body: { email, password, name, role: "user", data: { username, emailVerified: Boolean(contactEmail) } },
       headers: request.headers,
     });
     try {
@@ -82,9 +84,9 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
     }
 
     return Response.json({
-      account: { id: created.user.id, name, email, username },
+      account: { id: created.user.id, name, email: contactEmail, username },
       household,
-      welcomeMessage: buildWelcomeMessage({ householdName: household.name, name, email, username, password }),
+      ...(contactEmail ? { welcomeMessage: buildWelcomeMessage({ householdName: household.name, name, email: contactEmail, username, password }) } : {}),
     }, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not assign this person." }, { status: 400 });

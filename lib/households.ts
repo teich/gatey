@@ -1,14 +1,15 @@
 import "server-only";
 
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import { database } from "@/lib/database";
-import { credentials, member, organization, personPins, unifiPersonLinks, user, visitorHouseholds, visitorPins } from "@/lib/schema";
+import { visibleAccountEmail } from "@/lib/account-email";
+import { credentials, gateCodes, member, organization, personPins, unifiPersonLinks, user, visitorHouseholds, visitorPins } from "@/lib/schema";
 
 export type HouseholdMember = {
   id: string;
   userId: string;
   name: string;
-  email: string;
+  email: string | null;
   username: string | null;
   role: string;
   controllerUserId: string | null;
@@ -20,10 +21,12 @@ export type HouseholdAdminRecord = {
   slug: string;
   members: HouseholdMember[];
   visitorCount: number;
+  gateCode: { id: string; pin: string } | null;
 };
 
-type MemberRow = HouseholdMember & {
+type MemberRow = Omit<HouseholdMember, "email"> & {
   organizationId: string;
+  email: string;
 };
 
 export function listHouseholds(): HouseholdAdminRecord[] {
@@ -42,8 +45,17 @@ export function listHouseholds(): HouseholdAdminRecord[] {
     .leftJoin(unifiPersonLinks, eq(unifiPersonLinks.userId, user.id))
     .orderBy(sql`${user.name} collate nocase`, sql`${user.email} collate nocase`).all();
   const visitorCounts = database.select({ householdId: visitorHouseholds.householdId, visitorCount: count() })
-    .from(visitorHouseholds).groupBy(visitorHouseholds.householdId).all();
+    .from(visitorHouseholds)
+    .leftJoin(gateCodes, and(
+      eq(gateCodes.controllerVisitorId, visitorHouseholds.controllerVisitorId),
+      eq(gateCodes.kind, "home"),
+    ))
+    .where(isNull(gateCodes.id))
+    .groupBy(visitorHouseholds.householdId).all();
   const visitorCountByHousehold = new Map(visitorCounts.map((row) => [row.householdId, row.visitorCount]));
+  const homeCodeRows = database.select({ householdId: gateCodes.householdId, id: gateCodes.id, pin: gateCodes.pin })
+    .from(gateCodes).where(and(eq(gateCodes.kind, "home"), eq(gateCodes.state, "active"))).all();
+  const homeCodeByHousehold = new Map(homeCodeRows.map((row) => [row.householdId, { id: row.id, pin: row.pin }]));
 
   const membersByHousehold = new Map<string, HouseholdMember[]>();
   for (const member of members) {
@@ -52,7 +64,7 @@ export function listHouseholds(): HouseholdAdminRecord[] {
       id: member.id,
       userId: member.userId,
       name: member.name,
-      email: member.email,
+      email: visibleAccountEmail(member.email),
       username: member.username,
       role: member.role,
       controllerUserId: member.controllerUserId,
@@ -64,6 +76,7 @@ export function listHouseholds(): HouseholdAdminRecord[] {
     ...household,
     members: membersByHousehold.get(household.id) ?? [],
     visitorCount: visitorCountByHousehold.get(household.id) ?? 0,
+    gateCode: homeCodeByHousehold.get(household.id) ?? null,
   }));
 }
 
@@ -88,7 +101,7 @@ export function removeCreatorFromHousehold(householdId: string, userId: string) 
 }
 
 export function getHouseholdMember(householdId: string, memberId: string): HouseholdMember | null {
-  return database.select({
+  const row = database.select({
     id: member.id,
     userId: member.userId,
     role: member.role,
@@ -98,7 +111,8 @@ export function getHouseholdMember(householdId: string, memberId: string): House
     controllerUserId: unifiPersonLinks.controllerUserId,
   }).from(member).innerJoin(user, eq(user.id, member.userId))
     .leftJoin(unifiPersonLinks, eq(unifiPersonLinks.userId, user.id))
-    .where(and(eq(member.organizationId, householdId), eq(member.id, memberId))).get() ?? null;
+    .where(and(eq(member.organizationId, householdId), eq(member.id, memberId))).get();
+  return row ? { ...row, email: visibleAccountEmail(row.email) } : null;
 }
 
 export function getUserByEmail(email: string): { id: string; name: string; email: string; username: string | null } | null {
@@ -113,7 +127,7 @@ export function getUserHousehold(userId: string): { id: string; name: string } |
 }
 
 export function householdHasGateyRecords(householdId: string): boolean {
-  return [credentials, visitorPins, personPins, visitorHouseholds].some((table) =>
+  return [credentials, visitorPins, personPins, visitorHouseholds, gateCodes].some((table) =>
     Boolean(database.select({ householdId: table.householdId }).from(table).where(eq(table.householdId, householdId)).limit(1).get()),
   );
 }

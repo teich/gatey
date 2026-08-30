@@ -3,13 +3,14 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { database } from "./database.ts";
+import { visibleAccountEmail } from "./account-email.ts";
 import { credentials, member, organization, personPins, session, unifiPersonLinks, user, visitorHouseholds, visitorPins } from "./schema.ts";
 
 export type PersonLink = {
   controllerUserId: string;
   userId: string;
   accountName: string;
-  email: string;
+  email: string | null;
   username: string | null;
   householdId: string | null;
   householdName: string | null;
@@ -18,7 +19,7 @@ export type PersonLink = {
 export type AssignableAccount = {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
   username: string | null;
   householdId: string | null;
   householdName: string | null;
@@ -43,7 +44,7 @@ export function listPersonLinks(): Map<string, PersonLink> {
     .leftJoin(organization, eq(organization.id, member.organizationId))
     .orderBy(sql`${user.name} collate nocase`).all();
 
-  return new Map(rows.map((row) => [row.controllerUserId, row]));
+  return new Map(rows.map((row) => [row.controllerUserId, { ...row, email: visibleAccountEmail(row.email) }]));
 }
 
 export function listAssignableAccounts(): AssignableAccount[] {
@@ -63,7 +64,7 @@ export function listAssignableAccounts(): AssignableAccount[] {
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
-    email: row.email,
+    email: visibleAccountEmail(row.email),
     username: row.username,
     householdId: row.householdId,
     householdName: row.householdName,

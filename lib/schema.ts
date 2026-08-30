@@ -195,6 +195,8 @@ export const gateCodes = table("gate_codes", {
   check("gate_codes_kind_check", sql`${t.kind} in ('home', 'ongoing', 'temporary')`),
   check("gate_codes_state_check", sql`${t.state} in ('active', 'disabled')`),
   uniqueIndex("gate_codes_controller_visitor_id_uidx").on(t.controllerVisitorId),
+  uniqueIndex("gate_codes_active_home_household_uidx").on(t.householdId)
+    .where(sql`${t.kind} = 'home' and ${t.state} = 'active'`),
   index("gate_codes_household_state_kind_idx").on(t.householdId, t.state, t.kind),
 ]);
 

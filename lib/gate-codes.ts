@@ -52,6 +52,15 @@ export function findGateCode(householdId: string, id: string): GateCode | undefi
   return row ? mapGateCode(row) : undefined;
 }
 
+export function findHomeCode(householdId: string): GateCode | undefined {
+  const row = database.select().from(gateCodes).where(and(
+    eq(gateCodes.householdId, householdId),
+    eq(gateCodes.kind, "home"),
+    eq(gateCodes.state, "active"),
+  )).get();
+  return row ? mapGateCode(row) : undefined;
+}
+
 export function hasGateCodePin(pin: string, exceptId?: string): boolean {
   return Boolean(database.select({ id: gateCodes.id }).from(gateCodes)
     .where(and(eq(gateCodes.pin, pin), eq(gateCodes.state, "active"), ne(gateCodes.id, exceptId || ""))).limit(1).get());

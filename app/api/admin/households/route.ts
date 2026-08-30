@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { authorizeAdminRequest } from "@/lib/api-authorization";
 import { getUserByEmail, getUserHousehold, listHouseholds, removeCreatorFromHousehold } from "@/lib/households";
 import { buildWelcomeMessage, createTemporaryPassword } from "@/lib/welcome-message";
+import { managedAccountEmail, optionalAccountEmail } from "@/lib/account-email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,8 +74,10 @@ export async function PUT(request: Request) {
     const household = listHouseholds().find((item) => item.id === householdId);
     if (!household) return Response.json({ error: "Household not found." }, { status: 404 });
 
-    const email = cleanText(body.email, "Email", 3, 254).toLowerCase();
-    const existingUser = getUserByEmail(email);
+    const contactEmail = optionalAccountEmail(body.email);
+    const username = cleanText(body.username, "Username", 3, 64);
+    const email = contactEmail || managedAccountEmail(username);
+    const existingUser = contactEmail ? getUserByEmail(contactEmail) : null;
     if (existingUser) {
       const currentHousehold = getUserHousehold(existingUser.id);
       if (currentHousehold) {
@@ -99,7 +102,6 @@ export async function PUT(request: Request) {
     }
 
     const name = cleanText(body.name, "Person's name");
-    const username = cleanText(body.username, "Username", 3, 64);
     const password = createTemporaryPassword();
     const created = await auth.api.createUser({
       body: {
@@ -109,7 +111,7 @@ export async function PUT(request: Request) {
         role: "user",
         data: {
           username,
-          emailVerified: true,
+          emailVerified: Boolean(contactEmail),
         },
       },
       headers: request.headers,
@@ -131,10 +133,10 @@ export async function PUT(request: Request) {
     return Response.json({
       member: {
         name,
-        email,
+        email: contactEmail,
         username,
       },
-      welcomeMessage: buildWelcomeMessage({ householdName: household.name, name, email, username, password }),
+      ...(contactEmail ? { welcomeMessage: buildWelcomeMessage({ householdName: household.name, name, email: contactEmail, username, password }) } : {}),
     }, { status: 201 });
   } catch (error) {
     return Response.json({ error: errorMessage(error, "Could not add this person to the household.") }, { status: 400 });

@@ -19,6 +19,7 @@ function actionLabel(event: AuditEvent) {
   if (event.action === "guest-code.created") return event.outcome === "succeeded" ? "Created a guest code" : "Tried to create a guest code";
   if (event.action === "guest-code.cancelled") return event.outcome === "succeeded" ? "Canceled a guest code" : "Tried to cancel a guest code";
   if (event.action === "gate-code.created") return "Created a gate code";
+  if (event.action === "gate-code.updated") return "Changed a gate code";
   if (event.action === "gate-code.disabled") return "Disabled a gate code";
   if (event.action === "gate-code.migrated") return "Moved a code to Gatey";
   if (event.action === "person.service-account-marked") return "Marked a UniFi service account";

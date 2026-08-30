@@ -27,7 +27,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
         householdName: person.householdName,
         name: person.accountName,
         email: person.email,
-        username: person.username || person.email,
+        username: person.username || person.email || person.accountName,
         password,
       }),
     });

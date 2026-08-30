@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `gate_codes_active_home_household_uidx` ON `gate_codes` (`household_id`) WHERE "gate_codes"."kind" = 'home' and "gate_codes"."state" = 'active';

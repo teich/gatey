@@ -24,7 +24,8 @@ function householdHasGateyRecords(householdId: string) {
     database.select({ id: schema.credentials.id }).from(schema.credentials).where(eq(schema.credentials.householdId, householdId)).limit(1).get()
     ?? database.select({ id: schema.visitorPins.controllerVisitorId }).from(schema.visitorPins).where(eq(schema.visitorPins.householdId, householdId)).limit(1).get()
     ?? database.select({ id: schema.personPins.controllerUserId }).from(schema.personPins).where(eq(schema.personPins.householdId, householdId)).limit(1).get()
-    ?? database.select({ id: schema.visitorHouseholds.controllerVisitorId }).from(schema.visitorHouseholds).where(eq(schema.visitorHouseholds.householdId, householdId)).limit(1).get(),
+    ?? database.select({ id: schema.visitorHouseholds.controllerVisitorId }).from(schema.visitorHouseholds).where(eq(schema.visitorHouseholds.householdId, householdId)).limit(1).get()
+    ?? database.select({ id: schema.gateCodes.id }).from(schema.gateCodes).where(eq(schema.gateCodes.householdId, householdId)).limit(1).get(),
   );
 }
 

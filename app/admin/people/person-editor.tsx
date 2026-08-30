@@ -16,7 +16,7 @@ export function PersonEditor({ personId, userId, accountName, email, username, h
   personId: string;
   userId: string;
   accountName: string;
-  email: string;
+  email: string | null;
   username: string | null;
   householdId: string | null;
   households: HouseholdOption[];
@@ -64,7 +64,7 @@ export function PersonEditor({ personId, userId, accountName, email, username, h
         <div><h3 className="text-sm font-semibold">Account details</h3><p className="text-xs text-muted-foreground">Used for sign-in, household access, and activity attribution.</p></div>
         <div className="grid gap-4">
           <div className="grid gap-1.5"><label className="text-sm font-medium" htmlFor={`person-name-${personId}`}>Name</label><Input id={`person-name-${personId}`} name="name" defaultValue={accountName} autoComplete="name" required className="h-10" /></div>
-          <div className="grid gap-1.5"><label className="text-sm font-medium" htmlFor={`person-email-${personId}`}>Email address</label><Input id={`person-email-${personId}`} name="email" type="email" defaultValue={email} autoComplete="email" required className="h-10" /></div>
+          <div className="grid gap-1.5"><div className="flex items-baseline justify-between gap-3"><label className="text-sm font-medium" htmlFor={`person-email-${personId}`}>Email address</label><span className="text-xs text-muted-foreground">Optional</span></div><Input id={`person-email-${personId}`} name="email" type="email" defaultValue={email || ""} autoComplete="email" className="h-10" /><p className="text-xs text-muted-foreground">Leave blank for an admin-managed resident who does not use Gatey.</p></div>
           <div className="grid gap-1.5"><label className="text-sm font-medium" htmlFor={`person-household-${personId}`}>Household</label><select id={`person-household-${personId}`} name="householdId" defaultValue={householdId || ""} required className="h-10 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"><option value="" disabled>Choose a household…</option>{households.map((household) => <option value={household.id} key={household.id}>{household.name}</option>)}</select></div>
           {username ? <div className="flex items-center gap-3 rounded-xl border bg-muted/30 p-3"><div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground"><UserRound className="size-4" /></div><div><span className="block text-sm font-medium">Username: {username}</span><span className="block text-xs text-muted-foreground">Usernames are permanent sign-in identifiers.</span></div></div> : null}
         </div>

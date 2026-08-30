@@ -2,6 +2,7 @@ import { authorizeAdminRequest } from "@/lib/api-authorization";
 import { auth } from "@/lib/auth";
 import { getPersonLink, reassignPersonHousehold, validatePersonHouseholdReassignment } from "@/lib/admin-assignments";
 import { listHouseholds } from "@/lib/households";
+import { managedAccountEmail, optionalAccountEmail } from "@/lib/account-email";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,8 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
 
     const body = await request.json() as Record<string, unknown>;
     const name = cleanText(body.name, "Name", 1, 80);
-    const email = cleanText(body.email, "Email", 3, 254).toLowerCase();
+    const contactEmail = optionalAccountEmail(body.email);
+    const email = contactEmail || managedAccountEmail(link.username || link.userId);
     const householdId = cleanText(body.householdId, "Household", 1, 128);
     if (!listHouseholds().some((household) => household.id === householdId)) {
       return Response.json({ error: "Household not found." }, { status: 404 });
@@ -31,7 +33,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
     validatePersonHouseholdReassignment(link.userId, householdId);
 
     await auth.api.adminUpdateUser({
-      body: { userId: link.userId, data: { name, email, emailVerified: true } },
+      body: { userId: link.userId, data: { name, email, emailVerified: Boolean(contactEmail) } },
       headers: request.headers,
     });
     reassignPersonHousehold(id, link.userId, householdId);
