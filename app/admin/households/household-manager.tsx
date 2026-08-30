@@ -222,11 +222,12 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
       </div>
       <div className="admin-table-shell">
         <Table>
-          <TableHeader><TableRow><TableHead>Household</TableHead><TableHead>Short name</TableHead><TableHead>People</TableHead><TableHead>Visitor passes</TableHead><TableHead>Gate code</TableHead><TableHead>Status</TableHead><TableHead className="w-0 text-right">Actions</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead sortKey="household">Household</TableHead><TableHead sortKey="slug">Short name</TableHead><TableHead sortKey="people">People</TableHead><TableHead sortKey="visitors">Visitor passes</TableHead><TableHead sortKey="gateCode">Gate code</TableHead><TableHead sortKey="status">Status</TableHead><TableHead className="w-0 text-right">Actions</TableHead></TableRow></TableHeader>
           <TableBody>
             {visibleHouseholds.map((household) => {
               const unlinkedCount = household.members.filter((member) => !member.controllerUserId).length;
-              return <TableRow key={household.id}>
+              const status = !household.members.length ? household.gateCode ? "PIN only" : "No access" : unlinkedCount ? "Needs a UniFi link" : "Set up";
+              return <TableRow key={household.id} sortValues={{ household: household.name, slug: household.slug, people: household.members.length, visitors: household.visitorCount, gateCode: household.gateCode?.pin, status }}>
                 <TableCell><strong className="block font-medium">{household.name}</strong>{household.id === "oren-home" ? <span className="mt-1 block text-xs text-muted-foreground">Initial household</span> : null}</TableCell>
                 <TableCell><code className="rounded-md bg-muted px-2 py-1 text-xs">{household.slug}</code></TableCell>
                 <TableCell><span className="inline-flex items-center gap-1.5 font-medium"><UsersRound className="size-4 text-muted-foreground" />{peopleLabel(household.members.length)}</span></TableCell>

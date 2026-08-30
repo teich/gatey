@@ -1,21 +1,41 @@
 "use client"
 
 import * as React from "react"
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { compareTableValues, type TableSortValue } from "@/lib/table-sort"
+
+type SortDirection = "ascending" | "descending"
+type SortState = { key: string; direction: SortDirection } | undefined
+
+const TableSortContext = React.createContext<{
+  sort: SortState
+  toggleSort: (key: string) => void
+} | null>(null)
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  const [sort, setSort] = React.useState<SortState>()
+
+  function toggleSort(key: string) {
+    setSort((current) => current?.key === key
+      ? { key, direction: current.direction === "ascending" ? "descending" : "ascending" }
+      : { key, direction: "ascending" })
+  }
+
   return (
-    <div
-      data-slot="table-container"
-      className="relative w-full overflow-x-auto"
-    >
-      <table
-        data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
-    </div>
+    <TableSortContext value={{ sort, toggleSort }}>
+      <div
+        data-slot="table-container"
+        className="relative w-full overflow-x-auto"
+      >
+        <table
+          data-slot="table"
+          className={cn("w-full caption-bottom text-sm", className)}
+          {...props}
+        />
+      </div>
+    </TableSortContext>
   )
 }
 
@@ -30,12 +50,31 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
 }
 
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
+  const sorting = React.useContext(TableSortContext)
+  const children = React.useMemo(() => {
+    if (!sorting?.sort) return props.children
+
+    const { direction, key } = sorting.sort
+    return React.Children.toArray(props.children)
+      .map((child, index) => ({ child, index }))
+      .sort((left, right) => {
+        const leftValue = React.isValidElement<SortableTableRowProps>(left.child) ? left.child.props.sortValues?.[key] : undefined
+        const rightValue = React.isValidElement<SortableTableRowProps>(right.child) ? right.child.props.sortValues?.[key] : undefined
+        const comparison = compareTableValues(leftValue, rightValue)
+        const missingValue = leftValue == null || rightValue == null
+        return (missingValue || direction === "ascending" ? comparison : -comparison) || left.index - right.index
+      })
+      .map(({ child }) => child)
+  }, [props.children, sorting?.sort])
+
   return (
     <tbody
       data-slot="table-body"
       className={cn("[&_tr:last-child]:border-0", className)}
       {...props}
-    />
+    >
+      {children}
+    </tbody>
   )
 }
 
@@ -52,7 +91,12 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   )
 }
 
-function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+type SortableTableRowProps = React.ComponentProps<"tr"> & {
+  sortValues?: Record<string, TableSortValue>
+}
+
+function TableRow({ className, sortValues: _sortValues, ...props }: SortableTableRowProps) {
+  void _sortValues
   return (
     <tr
       data-slot="table-row"
@@ -65,16 +109,30 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+type SortableTableHeadProps = React.ComponentProps<"th"> & {
+  sortKey?: string
+}
+
+function TableHead({ className, sortKey, children, ...props }: SortableTableHeadProps) {
+  const sorting = React.useContext(TableSortContext)
+  const currentSort = sorting?.sort
+  const activeDirection = currentSort && currentSort.key === sortKey ? currentSort.direction : undefined
+  const SortIcon = activeDirection === "ascending" ? ArrowUp : activeDirection === "descending" ? ArrowDown : ArrowUpDown
+
   return (
     <th
       data-slot="table-head"
+      aria-sort={sortKey ? activeDirection || "none" : undefined}
       className={cn(
         "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
-    />
+    >
+      {sortKey ? <button type="button" className="table-sort-button" onClick={() => sorting?.toggleSort(sortKey)}>
+        <span>{children}</span><SortIcon aria-hidden="true" />
+      </button> : children}
+    </th>
   )
 }
 
