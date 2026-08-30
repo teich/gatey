@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRightIcon, HouseIcon, TicketIcon, UsersIcon } from "lucide-react";
 import { listPersonLinks, listVisitorHouseholds } from "@/lib/admin-assignments";
 import { listHouseholds } from "@/lib/households";
+import { listUnifiServiceAccounts } from "@/lib/service-accounts";
 import { getUnifiInventorySnapshot } from "@/lib/unifi-inventory-cache";
 
 export const dynamic = "force-dynamic";
@@ -10,11 +11,12 @@ export const runtime = "nodejs";
 export default async function AdminPage() {
   const households = listHouseholds();
   const peopleLinks = listPersonLinks();
+  const serviceAccounts = listUnifiServiceAccounts();
   const visitorHouseholds = listVisitorHouseholds();
   const { visitors, users, lastError: errorMessage } = getUnifiInventorySnapshot();
 
   const currentVisitors = visitors.filter((visitor) => !["CANCELLED", "NO_VISIT", "EXPIRED", "REVOKED"].includes(visitor.status.toUpperCase()));
-  const unassignedPeople = users.filter((person) => !peopleLinks.get(person.id)?.householdId);
+  const unassignedPeople = users.filter((person) => !serviceAccounts.has(person.id) && !peopleLinks.get(person.id)?.householdId);
   const unassignedVisitors = currentVisitors.filter((visitor) => !visitorHouseholds.has(visitor.id));
   const memberCount = households.reduce((count, household) => count + household.members.length, 0);
   const cards = [

@@ -302,7 +302,13 @@ export function listAccessActivity(limit = 250): AccessActivityItem[] {
     select events.id, events.occurred_at, events.actor_controller_id, events.actor_display_name, events.actor_type,
       events.credential_provider, events.result, events.display_message, events.reason,
       events.door_name, links.subject_type, links.label as subject_label,
-      service_account.label as service_account_label,
+      coalesce(service_account.label, (
+        select matched_service_account.label
+        from unifi_service_accounts matched_service_account
+        where events.actor_type = 'open_api'
+          and lower(trim(matched_service_account.label)) = lower(trim(events.actor_display_name))
+        limit 1
+      )) as service_account_label,
       gatey_user.id as person_user_id,
       visitor_link.controller_visitor_id as visitor_controller_visitor_id,
       coalesce(link_household.name, visitor_household.name, person_household.name) as household_name
