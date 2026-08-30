@@ -206,6 +206,7 @@ if [[ -d "$repo/.next" ]]; then mv "$repo/.next" "$next_backup"; fi
 mv "$stage/.next" "$repo/.next"
 chown -R "$app_user:$app_user" "$repo/.next"
 systemctl start "$service"
+sleep 1
 
 healthy=0
 for attempt in {1..20}; do
