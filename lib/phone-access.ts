@@ -86,3 +86,28 @@ export function updateUserPhoneNumber(userId: string, id: string, input: Omit<Ph
 export function deleteUserPhoneNumber(userId: string, id: string): boolean {
   return Boolean(database.delete(userPhoneNumbers).where(and(eq(userPhoneNumbers.id, id), eq(userPhoneNumbers.userId, userId))).run().changes);
 }
+
+export type PhoneAccessInput = Omit<PhoneAccess, "id" | "userId"> & { id?: string };
+
+export function replaceUserPhoneNumbers(userId: string, inputs: PhoneAccessInput[]): PhoneAccess[] {
+  const existingIds = new Set(listUserPhoneNumbers(userId).map((phone) => phone.id));
+  const now = new Date().toISOString();
+  const prepared = inputs.map((input) => ({
+    ...input,
+    id: input.id && existingIds.has(input.id) ? input.id : randomUUID(),
+    phoneE164: normalizeE164(input.phoneE164),
+  }));
+
+  if (new Set(prepared.map((phone) => phone.phoneE164)).size !== prepared.length) {
+    throw new Error("Each phone number can only be listed once.");
+  }
+
+  database.transaction((tx) => {
+    tx.delete(userPhoneNumbers).where(eq(userPhoneNumbers.userId, userId)).run();
+    if (prepared.length) {
+      tx.insert(userPhoneNumbers).values(prepared.map((phone) => ({ ...phone, userId, createdAt: now, updatedAt: now }))).run();
+    }
+  });
+
+  return prepared.map((phone) => ({ ...phone, userId }));
+}
