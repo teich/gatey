@@ -86,7 +86,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
     return Response.json({
       account: { id: created.user.id, name, email: contactEmail, username },
       household,
-      ...(contactEmail ? { welcomeMessage: buildWelcomeMessage({ householdName: household.name, name, email: contactEmail, username, password }) } : {}),
+      welcomeMessage: buildWelcomeMessage({ householdName: household.name, name, email: contactEmail, username, password }),
     }, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not assign this person." }, { status: 400 });

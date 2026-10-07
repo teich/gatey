@@ -1,5 +1,6 @@
 "use client";
 
+import { AddPerson } from "@/app/admin/people/add-person";
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, HousePlus, KeyRound, Pencil, Search, Trash2, UsersRound } from "lucide-react";
@@ -234,7 +235,7 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
                 <TableCell>{household.visitorCount}</TableCell>
                 <TableCell>{household.gateCode ? <strong className="table-pin text-lg">{spacedPin(household.gateCode.pin)}</strong> : <span className="text-muted-foreground">Not set</span>}</TableCell>
                 <TableCell>{!household.members.length ? household.gateCode ? <span className="managed-badge">PIN only</span> : <span className="existing-badge">No access</span> : unlinkedCount ? <span className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-700"><AlertCircle className="size-4" />{unlinkedCount === 1 ? "Needs a UniFi link" : `${unlinkedCount} need UniFi links`}</span> : <span className="managed-badge">Set up</span>}</TableCell>
-                <TableCell className="text-right"><Button type="button" variant="outline" onClick={() => beginEdit(household)}><Pencil data-icon="inline-start" />Edit</Button></TableCell>
+                <TableCell className="text-right"><div className="flex justify-end gap-2"><AddPerson households={households.map(({ id, name }) => ({ id, name }))} householdId={household.id} /><Button type="button" variant="outline" onClick={() => beginEdit(household)}><Pencil data-icon="inline-start" />Edit</Button></div></TableCell>
               </TableRow>;
             })}
             {!visibleHouseholds.length ? <TableRow><TableCell colSpan={7} className="py-12 text-center text-muted-foreground">{households.length ? "No households match that search." : "No households have been created yet."}</TableCell></TableRow> : null}

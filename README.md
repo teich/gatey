@@ -36,6 +36,29 @@ The administration interface connects UniFi records to households and provides a
 - `ffmpeg` for camera snapshots
 - A Twilio number for call-to-open, if used
 
+## Adding residents
+
+In **Admin → Households**, use **Add person** beside the household, or use
+**Admin → People → Add person**. Enter the person's first and last name, a
+unique username, and optional email and call-to-open phone. Choose the UniFi
+access policy used by residents and optionally enter a personal PIN. Gatey
+creates the UniFi person, local account, and household membership, then assigns
+the selected policy and PIN. Login details are shown for copying even without
+an email; nothing is sent automatically.
+
+The UniFi token needs `edit:user` and `view:policy`, in addition to the existing
+inventory permissions. The server must have `GATEY_UNIFI_WRITES=true`. Policies
+are selected explicitly; Gatey does not create new policies or assume that any
+particular policy permits gate entry.
+
+If credential setup fails, **Retry access setup** uses the person already
+created. After closing the dialog, use **People → Gate access** to finish.
+Saving Gate access replaces the person's policy assignments with the selected
+policy; leaving its PIN field blank preserves their current PIN. If creation
+itself times out, check People/UniFi before creating again: Gatey retains the
+reserved account to prevent a duplicate request with the same username. An
+unlinked UniFi person can be assigned to that existing account using **Assign**.
+
 ## Development
 
 Install dependencies, copy `.env.example` to `.env`, and configure the required values for your environment. Then initialize the database and start the development server:

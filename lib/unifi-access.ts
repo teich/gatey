@@ -103,9 +103,9 @@ const globalForGateStatus = globalThis as unknown as {
 
 const CREDENTIAL_LAST_USE_TTL_MS = 60_000;
 
-function assertControllerChangesAllowed() {
+export function assertControllerChangesAllowed() {
   if (["1", "true", "yes"].includes((process.env.GATEY_UNIFI_WRITES || "").toLowerCase())) return;
-  throw new Error("Gate code and party-mode changes are enabled only on Gatey's production server.");
+  throw new Error("UniFi changes are enabled only on Gatey's production server.");
 }
 
 export type VisitorInventoryItem = {
@@ -488,6 +488,33 @@ export async function listUserInventory(): Promise<UserInventoryItem[]> {
     policyNames: (user.access_policies || []).map((policy) => policy.name || "Unnamed policy"),
     hasNfcCard: Boolean(user.nfc_cards?.length),
   })).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export type AccessPolicyOption = { id: string; name: string };
+
+export async function listAccessPolicies(): Promise<AccessPolicyOption[]> {
+  const policies = await request<AccessPolicyOption[]>("/access_policies");
+  return policies.map(({ id, name }) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function createUnifiPerson(input: { firstName: string; lastName: string; email: string | null }): Promise<string> {
+  assertControllerChangesAllowed();
+  const person = await request<{ id: string }>("/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ first_name: input.firstName, last_name: input.lastName, ...(input.email ? { user_email: input.email } : {}) }),
+  });
+  if (!person?.id) throw new Error("UniFi did not return the new person's ID.");
+  return person.id;
+}
+
+export async function assignUserAccessPolicy(userId: string, policyId: string) {
+  assertControllerChangesAllowed();
+  await request<null>(`/users/${encodeURIComponent(userId)}/access_policies`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ access_policy_ids: [policyId] }),
+  });
 }
 
 export async function replaceUserPin(userId: string, requestedPin?: string): Promise<string> {
