@@ -78,61 +78,44 @@ npm run lint
 npm run build
 ```
 
-## iPhone arrival pilot
+## iPhone arrival automation
 
-After deploying this change and running `npm run db:migrate`, residents can open
-**More → Open on arrival** (or `/shortcuts`). `BETTER_AUTH_URL` must be the public
-HTTPS origin residents use; the phone must be able to reach it over cellular.
-There are no new services or secrets to configure. Start with the two pilot
-neighbors; the setup page itself is available to all signed-in household members.
+Open **More → Open on arrival** (or `/shortcuts`) on your iPhone:
 
-1. Download **Open Gatey**, open the downloaded `.shortcut` file in Shortcuts,
-   and add it. Keep its name unchanged.
-2. Back in Gatey, create a connection link and tap **Connect this iPhone**.
-   Approve the network and file permissions in Shortcuts. Pairing does not open
-   the gate. The link expires after ten minutes and works once.
-3. Run the shortcut manually once while at the gate. This **does open the gate**
-   and establishes any remaining permissions before an unattended arrival.
-4. Add an **Arrive** automation centered on the gate, initially around a
-   200-meter radius, **Any Time**, **Run Immediately**, running **Open Gatey**
-   with no input. On newer iOS versions, add the automation inside the shortcut.
-5. Drive outside the circle and return with the phone locked. Record whether
-   opening is early, on time, late, or missed; adjust the radius against the
-   gate's opening/closing cycle. Test cellular coverage at the boundary.
+1. Download **Open Gatey**, open it in Shortcuts, and choose **Add Shortcut**.
+2. Choose **Create access key** in Gatey and copy the Authorization value.
+3. Edit **Open Gatey**, expand the action’s options, and replace its Authorization
+   header value with the copied value (including **Bearer** and the space).
+4. Run it once at the gate to approve network access and confirm the gate opens.
+5. Add an **Arrive** automation at the gate, choose **Run Immediately**, and run
+   **Open Gatey**. Start with a boundary around 200 meters and adjust after a test drive.
 
-The shared download contains no credentials. Pairing exchanges a random code
-for an opening-only token and saves the response in
-`iCloud Drive/Shortcuts/Gatey-connection.json`. Enable iCloud Drive and keep the
-file downloaded if Files offers that option. This is a pilot storage choice,
-not Keychain: the file contains a bearer credential and can sync to devices on
-the same Apple Account. Do not share that file. The shortcut stores one Gatey
-connection at a time. No location coordinates are sent to Gatey.
+The shortcut has exactly one **Get Contents of URL** action. Its URL
+(`https://gate.d4f.com/api/shortcuts/open`), POST method, and Authorization header
+name are already configured. Only the header value needs to be pasted. There is
+no pairing exchange or iCloud connection file. Delete the old shortcut if installed.
+Your phone needs internet connectivity at the arrival boundary; location stays
+on the phone.
 
-Gatey stores only SHA-256 hashes of random 256-bit codes/tokens. Each resident
-has one active key per household; successful re-pairing replaces it. Opening
-rechecks membership and bans, records `gate.open` with `source: shortcut`, and
-suppresses repeat requests for 30 seconds, including after controller errors.
-**Disconnect shortcut access** revokes both the opening key and unused pairing
-links; disable the arrival automation separately on the phone. No queued or
-automatic retries are used. Normal Gatey access remains the fallback.
+The key is displayed when created; if you lose it, create a replacement and
+paste the new value into Shortcuts. Creating a replacement invalidates the old
+key. **Disconnect shortcut access** disables it. The server still checks resident
+access, logs openings, and suppresses duplicate requests for 30 seconds.
 
-### Shortcut maintenance and validation
+`BETTER_AUTH_URL` must be the public HTTPS origin. The existing shortcut database
+migration must be applied with `npm run db:migrate`. The legacy pairing table is
+retained for database compatibility but the pairing endpoint has been removed.
 
-`scripts/build-shortcut.py` generates the readable plist and signs the shared
-download with Apple's macOS `shortcuts sign --mode anyone`. The signed file is
-checked in under `public/shortcuts`, so the Linux server needs no signing tools.
-To regenerate after editing actions, run this on a Mac with Shortcuts/iCloud:
+### Shortcut maintenance
+
+The signed download and readable plist are checked in under `public/shortcuts`.
+Regenerate on a Mac with Apple Shortcuts:
 
 ```bash
 python3 scripts/build-shortcut.py
 ```
 
-The script also supports `--unsigned-only` for source inspection on other OSes.
-Signing may require running outside a restrictive filesystem sandbox. Never
-embed production credentials in this shared artifact.
-
-Validated in this change: pairing/access route tests, full test suite, lint,
-production build with a disposable migrated database, an HTTP smoke test of the
-authenticated setup/download/pair/revoke flow, Apple signing, and native
-Shortcuts import-preview/action inspection. An actual iPhone pairing, locked-phone
-file access, and drive-through timing still need to be verified at the gate.
+The default origin is `https://gate.d4f.com`; use `--base-url https://your-host`
+when building for another deployment. Signing uses Apple’s `shortcuts sign
+--mode anyone` and may require running outside a filesystem sandbox. Use
+`--unsigned-only` to inspect the plist without signing.

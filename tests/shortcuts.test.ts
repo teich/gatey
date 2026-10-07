@@ -5,20 +5,12 @@ vi.mock("@/lib/api-authorization", () => ({ authorizeHouseholdRequest: mocks.aut
 vi.mock("@/lib/unifi-access", () => ({ unlockGate: mocks.unlockGate }));
 
 import { sqlite } from "@/lib/database";
-import { claimShortcutOpen, createShortcutPairing, getShortcutConnection, redeemShortcutPairing, revokeShortcutConnection, SHORTCUT_COOLDOWN_MS } from "@/lib/shortcuts";
-import { POST as pair } from "@/app/api/shortcuts/pair/route";
+import { claimShortcutOpen, createShortcutConnection, getShortcutConnection, revokeShortcutConnection, SHORTCUT_COOLDOWN_MS } from "@/lib/shortcuts";
 import { POST as open } from "@/app/api/shortcuts/open/route";
 import { GET, POST, DELETE } from "@/app/api/shortcuts/route";
 
-function pairingCode(userId = "alice", householdId = "home", now = Date.now()) {
-  const link = createShortcutPairing(userId, householdId, now);
-  const input = JSON.parse(new URL(link.pairingUrl).searchParams.get("text")!);
-  expect(input.url).toBe("https://gatey.test/api/shortcuts/pair");
-  return input.code as string;
-}
-
 function connect(userId = "alice", householdId = "home", now = Date.now()) {
-  return redeemShortcutPairing(pairingCode(userId, householdId, now), now)!;
+  return createShortcutConnection(userId, householdId, now);
 }
 
 function openRequest(token: string) {
@@ -37,36 +29,23 @@ beforeEach(() => {
   mocks.unlockGate.mockResolvedValue({ state: "open" });
 });
 
-describe("shortcut pairing and access", () => {
-  it("redeems once, never opens during pairing, and stores only hashes", async () => {
-    const code = pairingCode();
-    expect(JSON.stringify(sqlite.prepare("SELECT * FROM shortcut_pairings").all())).not.toContain(code);
-    const response = await pair(new Request("https://gatey.test/api/shortcuts/pair", { method: "POST", body: JSON.stringify({ code }) }));
+describe("shortcut access", () => {
+  it("issues a key directly without opening and stores only its hash", async () => {
+    const response = await POST(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }));
     const result = await response.json();
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(result.openUrl).toBe("https://gatey.test/api/shortcuts/open");
     expect(result.token).toHaveLength(43);
+    expect(result.connection.id).toBeTruthy();
     expect(JSON.stringify(sqlite.prepare("SELECT * FROM shortcut_connections").all())).not.toContain(result.token);
-    expect(redeemShortcutPairing(code)).toBeNull();
+    expect(sqlite.prepare("SELECT count(*) AS count FROM shortcut_pairings").get()?.count).toBe(0);
     expect(mocks.unlockGate).not.toHaveBeenCalled();
   });
 
-  it("rejects expired, superseded, malformed, and revoked pairing codes", () => {
-    expect(redeemShortcutPairing(pairingCode("alice", "home", 1000), 601000)).toBeNull();
-    const old = pairingCode();
-    const latest = pairingCode();
-    expect(redeemShortcutPairing(old)).toBeNull();
-    expect(redeemShortcutPairing("invalid")).toBeNull();
-    revokeShortcutConnection("alice", "home");
-    expect(redeemShortcutPairing(latest)).toBeNull();
-  });
-
-  it("keeps the existing key until a new pairing succeeds, then invalidates it", () => {
+  it("invalidates the previous key when creating a replacement", () => {
     const old = connect();
-    const code = pairingCode();
-    expect(claimShortcutOpen(old.token).state).toBe("claimed");
-    const replacement = redeemShortcutPairing(code)!;
+    const replacement = connect();
     expect(claimShortcutOpen(old.token).state).toBe("unauthorized");
     expect(claimShortcutOpen(replacement.token).state).toBe("claimed");
   });
@@ -79,20 +58,16 @@ describe("shortcut pairing and access", () => {
     expect(claimShortcutOpen(bob.token).state).toBe("claimed");
   });
 
-  it("rejects removed membership both at pairing and at opening", () => {
+  it("rejects removed membership both at creation and at opening", () => {
     const connection = connect();
-    const code = pairingCode();
     sqlite.exec("DELETE FROM member WHERE user_id = 'alice'");
-    expect(redeemShortcutPairing(code)).toBeNull();
     expect(claimShortcutOpen(connection.token).state).toBe("unauthorized");
-    expect(() => pairingCode()).toThrow();
+    expect(() => connect()).toThrow();
   });
 
   it("rejects banned residents even with previously issued keys", () => {
     const connection = connect();
-    const code = pairingCode();
     sqlite.exec("UPDATE user SET banned = 1 WHERE id = 'alice'");
-    expect(redeemShortcutPairing(code)).toBeNull();
     expect(claimShortcutOpen(connection.token).state).toBe("unauthorized");
   });
 
@@ -134,13 +109,6 @@ describe("shortcut routes", () => {
     expect(sqlite.prepare("SELECT outcome FROM audit_events").get()?.outcome).toBe("failed");
   });
 
-  it("rejects malformed pairing bodies without side effects", async () => {
-    for (const body of ["not-json", "null", "{}", '{"code":123}']) {
-      expect((await pair(new Request("https://gatey.test/api/shortcuts/pair", { method: "POST", body }))).status).toBe(401);
-    }
-    expect(mocks.unlockGate).not.toHaveBeenCalled();
-  });
-
   it("protects setup mutations from cross-origin requests", async () => {
     for (const origin of ["https://evil.test", "null", ""]) {
       expect((await POST(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin } }))).status).toBe(403);
@@ -159,17 +127,9 @@ describe("shortcut routes", () => {
     expect((await POST(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }))).status).toBe(401);
   });
 
-  it("returns an installable pairing link and disconnects through the UI API", async () => {
+  it("disconnects a directly issued key through the UI API", async () => {
     const response = await POST(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }));
-    const pairingUrl = (await response.json()).pairingUrl;
-    const link = new URL(pairingUrl);
-    // Apple's custom URL scheme does not apply form-style '+' decoding.
-    const rawName = link.search.slice(1).split("&").find((part) => part.startsWith("name="))!.slice(5);
-    expect(decodeURIComponent(rawName)).toBe("Open Gatey");
-    expect(pairingUrl).not.toContain("+");
-    expect(link.searchParams.get("name")).toBe("Open Gatey");
-    const { code } = JSON.parse(link.searchParams.get("text")!);
-    const { token } = redeemShortcutPairing(code)!;
+    const { token } = await response.json();
     expect((await DELETE(new Request("https://gatey.test/api/shortcuts", { method: "DELETE", headers: { origin: "https://gatey.test" } }))).status).toBe(200);
     expect(claimShortcutOpen(token).state).toBe("unauthorized");
   });

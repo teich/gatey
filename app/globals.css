@@ -2060,3 +2060,5 @@ button:focus-visible { outline: 3px solid #d09a42; outline-offset: 3px; }
 .shortcut-button:disabled, .shortcut-secondary:disabled { opacity: .55; cursor: wait; }
 .shortcut-connect { margin-top: 16px; }
 .shortcut-error { color: var(--danger); }
+
+.shortcut-value { display: block; width: 100%; min-width: 0; margin: 8px 0 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: #f7f8f6; }
