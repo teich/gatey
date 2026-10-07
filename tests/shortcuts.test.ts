@@ -161,7 +161,12 @@ describe("shortcut routes", () => {
 
   it("returns an installable pairing link and disconnects through the UI API", async () => {
     const response = await POST(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }));
-    const link = new URL((await response.json()).pairingUrl);
+    const pairingUrl = (await response.json()).pairingUrl;
+    const link = new URL(pairingUrl);
+    // Apple's custom URL scheme does not apply form-style '+' decoding.
+    const rawName = link.search.slice(1).split("&").find((part) => part.startsWith("name="))!.slice(5);
+    expect(decodeURIComponent(rawName)).toBe("Open Gatey");
+    expect(pairingUrl).not.toContain("+");
     expect(link.searchParams.get("name")).toBe("Open Gatey");
     const { code } = JSON.parse(link.searchParams.get("text")!);
     const { token } = redeemShortcutPairing(code)!;

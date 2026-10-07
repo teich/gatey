@@ -48,7 +48,9 @@ export function createShortcutPairing(userId: string, householdId: string, now =
   });
   const input = JSON.stringify({ url: `${shortcutBaseUrl()}/api/shortcuts/pair`, code });
   const params = new URLSearchParams({ name: SHORTCUT_NAME, input: "text", text: input });
-  return { pairingUrl: `shortcuts://run-shortcut?${params}`, expiresAt };
+  // Shortcuts decodes percent escapes but treats form-encoded '+' literally.
+  // Encode spaces as %20 in both the shortcut name and the JSON input.
+  return { pairingUrl: `shortcuts://run-shortcut?${params.toString().replace(/\+/g, "%20")}`, expiresAt };
 }
 
 export function redeemShortcutPairing(code: string, now = Date.now()) {
