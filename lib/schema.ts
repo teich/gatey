@@ -4,6 +4,26 @@ import { check, index, integer, snakeCase, text, uniqueIndex } from "drizzle-orm
 const table = snakeCase.table;
 const timestamp = () => integer({ mode: "timestamp_ms" });
 
+export const shortcutPairings = table("shortcut_pairings", {
+  codeHash: text().primaryKey(),
+  userId: text().notNull().references(() => user.id, { onDelete: "cascade" }),
+  householdId: text().notNull().references(() => organization.id, { onDelete: "cascade" }),
+  expiresAt: integer().notNull(),
+});
+
+export const shortcutConnections = table("shortcut_connections", {
+  id: text().primaryKey(),
+  userId: text().notNull().references(() => user.id, { onDelete: "cascade" }),
+  householdId: text().notNull().references(() => organization.id, { onDelete: "cascade" }),
+  tokenHash: text().notNull(),
+  createdAt: integer().notNull(),
+  lastAttemptAt: integer(),
+  lastUsedAt: integer(),
+}, (t) => [
+  uniqueIndex("shortcut_connections_token_uidx").on(t.tokenHash),
+  uniqueIndex("shortcut_connections_user_household_uidx").on(t.userId, t.householdId),
+]);
+
 export const user = table("user", {
   id: text().primaryKey(),
   name: text().notNull(),
