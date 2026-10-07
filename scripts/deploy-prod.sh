@@ -84,7 +84,7 @@ artifact="$deploy_temp/gatey-$short_commit.tar.gz"
 tar -C "$build_root" -czf "$artifact" .next/standalone
 remote_artifact="/tmp/gatey-$short_commit.tar.gz"
 
-echo "Uploading the build to $prod_host…"
+echo "Uploading the build to ${prod_host}…"
 scp "$artifact" "$prod_host:$remote_artifact"
 
 ssh "$prod_host" bash -s -- "$expected_commit" "$remote_artifact" <<'REMOTE'
