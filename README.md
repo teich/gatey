@@ -80,13 +80,15 @@ npm run build
 
 ## Production deployment
 
-Production runs on the home Proxmox server (WTR), not on a hosting platform:
+`npm run deploy:prod` deploys to a single Linux server over SSH. Set the target in `.env` (or the environment), for example `GATEY_PROD_HOST=root@gatey.example.lan`. The script expects:
 
-- **Host:** LXC 107 `gatey` at `192.168.2.93`, DHCP-reserved. The app runs as `gatey.service` on port 3000, from `/opt/gatey`. Its environment is in `/etc/gatey/gatey.env` and its database in `/var/lib/gatey/gatey.sqlite`, with pre-deploy backups in `/var/lib/gatey/backups`.
-- **Public access:** `https://gate.d4f.com` goes through a Cloudflare Tunnel. In the Teich Cloudflare account, the `d4f.com` zone routes `gate` to the remotely managed tunnel `HOMELAB_PROD`. That tunnel's connector runs in LXC 106 `cloudflared-teich` and forwards to `http://192.168.2.93:3000`. No ports are open on the router.
-- **Configuration:** `BETTER_AUTH_URL` and `TWILIO_PUBLIC_BASE_URL` must be `https://gate.d4f.com`.
+- the app at `/opt/gatey`, run by `gatey.service` on port 3000 with Node.js 26;
+- its environment in `/etc/gatey/gatey.env`, with `BETTER_AUTH_URL` and `TWILIO_PUBLIC_BASE_URL` set to the public HTTPS origin;
+- the database at `/var/lib/gatey/gatey.sqlite`, with pre-deploy backups in `/var/lib/gatey/backups`.
 
-To deploy, push to `main` and run `npm run deploy:prod`. It builds locally with Node 26, uploads the standalone build over SSH, backs up the database, runs migrations, and rolls back if the health check fails. To copy the production database to your machine, run `npm run sync:prod-db`. The server inventory and the tunnel connector are documented in the onas repo (`ops/INVENTORY.md`).
+It builds the commit at `origin/main` locally, uploads the standalone build, backs up the database, runs migrations, installs the systemd timers in `systemd/`, and rolls back if the health check fails. `npm run sync:prod-db` copies the production database to your machine.
+
+Gatey does not need open inbound ports; a tunnel such as Cloudflare Tunnel can forward the public origin to port 3000.
 
 ### Single-process design
 
@@ -107,7 +109,7 @@ Open **More → Open on arrival** (or `/shortcuts`) on your iPhone:
    **Open Gatey**. Start with a boundary around 200 meters and adjust after a test drive.
 
 The shortcut has exactly one **Get Contents of URL** action. Its URL
-(`https://gate.d4f.com/api/shortcuts/open`), POST method, and Authorization header
+(`<your Gatey origin>/api/shortcuts/open`), POST method, and Authorization header
 name are already configured. Only the header value needs to be pasted. There is
 no pairing exchange or iCloud connection file. Delete the old shortcut if installed.
 Your phone needs internet connectivity at the arrival boundary; location stays
@@ -128,10 +130,9 @@ The signed download and readable plist are checked in under `public/shortcuts`.
 Regenerate on a Mac with Apple Shortcuts:
 
 ```bash
-python3 scripts/build-shortcut.py
+python3 scripts/build-shortcut.py --base-url https://gate.example.com
 ```
 
-The default origin is `https://gate.d4f.com`; use `--base-url https://your-host`
-when building for another deployment. Signing uses Apple’s `shortcuts sign
+Pass your deployment's public HTTPS origin as `--base-url`. Signing uses Apple’s `shortcuts sign
 --mode anyone` and may require running outside a filesystem sandbox. Use
 `--unsigned-only` to inspect the plist without signing.

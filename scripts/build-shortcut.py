@@ -8,13 +8,12 @@ import tempfile
 from urllib.parse import urlsplit
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DEFAULT_BASE_URL = "https://gate.d4f.com"
 
 
 def build(base_url):
     url = urlsplit(base_url)
     if url.scheme != "https" or not url.netloc or url.username or url.password or url.query or url.fragment or url.path not in ("", "/"):
-        raise ValueError("Use the public HTTPS origin, such as https://gate.d4f.com")
+        raise ValueError("Use the public HTTPS origin, such as https://gate.example.com")
 
     def text(value):
         return {"Value": {"string": value}, "WFSerializationType": "WFTextTokenString"}
@@ -57,7 +56,7 @@ def build(base_url):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument("--base-url", required=True, help="public HTTPS origin, such as https://gate.example.com")
     parser.add_argument("--unsigned-only", action="store_true")
     parser.add_argument("--output-dir", type=pathlib.Path, default=ROOT / "public" / "shortcuts")
     args = parser.parse_args()
