@@ -61,7 +61,7 @@ unlinked UniFi person can be assigned to that existing account using **Assign**.
 
 ## Development
 
-Install dependencies, copy `.env.example` to `.env`, and configure the required values for your environment. Then initialize the database and start the development server:
+Install dependencies, copy `.env.example` to `.env`, and configure the required values for your environment. `GATEY_ADMIN_EMAIL` and `GATEY_ADMIN_USERNAME` name the first administrator. Then initialize the database and start the development server:
 
 ```bash
 npm install
@@ -87,6 +87,12 @@ Production runs on the home Proxmox server (WTR), not on a hosting platform:
 - **Configuration:** `BETTER_AUTH_URL` and `TWILIO_PUBLIC_BASE_URL` must be `https://gate.d4f.com`.
 
 To deploy, push to `main` and run `npm run deploy:prod`. It builds locally with Node 26, uploads the standalone build over SSH, backs up the database, runs migrations, and rolls back if the health check fails. To copy the production database to your machine, run `npm run sync:prod-db`. The server inventory and the tunnel connector are documented in the onas repo (`ops/INVENTORY.md`).
+
+### Single-process design
+
+Gatey assumes it runs as exactly one Node.js process, as it does in production. The gate-status and door caches, the party-mode timer, and the deduplication of concurrent controller requests live in process memory, and SQLite is opened by that process alone. Running several instances behind a load balancer would need these moved into shared storage first.
+
+The systemd timers call `/api/internal/*` over loopback. Those endpoints refuse requests that arrive through the Cloudflare Tunnel even when they carry the scheduler secret. Every other cookie-authenticated API change must carry Gatey's own `Origin` header (see `proxy.ts`).
 
 ## iPhone arrival automation
 

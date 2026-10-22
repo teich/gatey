@@ -62,4 +62,43 @@ describe("household-scoped gate-code routes", () => {
     expect(dependencies.replaceVisitorPin).not.toHaveBeenCalled();
     expect(dependencies.revokeCredential).not.toHaveBeenCalled();
   });
+
+  const activeCode = {
+    id: "code-a",
+    label: "Gardener",
+    pin: "2468",
+    kind: "ongoing",
+    startsAt: "2026-01-01T00:00:00.000Z",
+    controllerEndsAt: "2040-01-01T00:00:00.000Z",
+    controllerVisitorId: "visitor-a",
+    state: "active",
+  };
+
+  function patchPin(pin: string) {
+    return PATCH(new Request("https://gatey.test/api/gate-codes/code-a", { method: "PATCH", body: JSON.stringify({ pin }) }), context("code-a"));
+  }
+
+  it("does not confirm that a conflicting PIN belongs to another household, and audits the attempt", async () => {
+    dependencies.findGateCode.mockReturnValue(activeCode);
+    dependencies.hasGateCodePin.mockReturnValue(true);
+
+    const response = await patchPin("1357");
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: "This code can't be used. Choose a different one." });
+    expect(dependencies.recordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({ action: "gate-code.pin-unavailable", householdId: "home-a" }));
+    expect(dependencies.replaceVisitorPin).not.toHaveBeenCalled();
+  });
+
+  it("does not show residents the controller's error text", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    dependencies.findGateCode.mockReturnValue(activeCode);
+    dependencies.hasGateCodePin.mockReturnValue(false);
+    dependencies.replaceVisitorPin.mockRejectedValue(new Error("CODE_PIN_EXISTS visitor-b"));
+
+    const response = await patchPin("1357");
+
+    expect(response.status).toBe(424);
+    await expect(response.json()).resolves.toEqual({ error: "Could not update this gate code." });
+  });
 });

@@ -180,4 +180,18 @@ describe("Twilio voice webhook", () => {
     expect(await response.text()).toContain("Unable to open the gate");
     expect(dependencies.finishTwilioAction).toHaveBeenCalledWith("CA123", "open", "failed", "offline");
   });
+
+  it("records callers whose caller ID is not fully attested, without blocking them", async () => {
+    const response = await handleTwilioVoice(signedRequest("/twilio/voice", { From: caller.phoneE164, CallSid: "CA123", StirVerstat: "TN-Validation-Passed-C" }));
+
+    expect(await response.text()).toContain("Press 1 now to open the gate.");
+    expect(dependencies.recordTwilioEvent).toHaveBeenCalledWith(expect.objectContaining({ event: "caller_unverified", detail: "TN-Validation-Passed-C", callSid: "CA123" }));
+  });
+
+  it("does not flag a fully attested caller ID", async () => {
+    await handleTwilioVoice(signedRequest("/twilio/voice", { From: caller.phoneE164, CallSid: "CA123", StirVerstat: "TN-Validation-Passed-A" }));
+
+    expect(dependencies.recordTwilioEvent).not.toHaveBeenCalledWith(expect.objectContaining({ event: "caller_unverified" }));
+    expect(dependencies.recordTwilioEvent).toHaveBeenCalledWith(expect.objectContaining({ event: "caller_prompted", detail: "Caller ID: TN-Validation-Passed-A" }));
+  });
 });

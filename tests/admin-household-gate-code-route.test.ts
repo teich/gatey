@@ -5,6 +5,8 @@ const dependencies = vi.hoisted(() => ({
   recordAuditEvent: vi.fn(),
   disableGateCode: vi.fn(),
   findHomeCode: vi.fn(),
+  findGateCode: vi.fn(),
+  hasHomeCode: vi.fn(),
   hasGateCodePin: vi.fn(),
   saveGateCode: vi.fn(),
   updateGateCode: vi.fn(),
@@ -20,6 +22,8 @@ vi.mock("@/lib/audit-log", () => ({ recordAuditEvent: dependencies.recordAuditEv
 vi.mock("@/lib/gate-codes", () => ({
   disableGateCode: dependencies.disableGateCode,
   findHomeCode: dependencies.findHomeCode,
+  findGateCode: dependencies.findGateCode,
+  hasHomeCode: dependencies.hasHomeCode,
   hasGateCodePin: dependencies.hasGateCodePin,
   saveGateCode: dependencies.saveGateCode,
   updateGateCode: dependencies.updateGateCode,
@@ -67,7 +71,8 @@ describe("admin household gate-code routes", () => {
   });
 
   it("creates a household code without requiring any household members", async () => {
-    dependencies.findHomeCode.mockReturnValueOnce(undefined).mockReturnValue(code);
+    dependencies.findHomeCode.mockReturnValue(undefined);
+    dependencies.findGateCode.mockReturnValue(code);
     dependencies.saveGateCode.mockReturnValue(code.id);
     dependencies.provisionAndPersistGateCode.mockImplementation(async (_input, persist) => ({
       visitorId: code.controllerVisitorId,

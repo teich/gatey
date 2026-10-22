@@ -13,6 +13,7 @@ import { database } from "@/lib/database";
 import { organization, partyMode as partyModeTable } from "@/lib/schema";
 import {
   endPartyMode,
+  getPartyMode,
   PartyModeConflictError,
   PartyModeValidationError,
   reconcilePartyMode,
@@ -158,5 +159,40 @@ describe("party-mode state machine", () => {
     await expect(endPartyMode({ householdId: "home-a", isSystemAdmin: false }))
       .rejects.toThrow("controller unavailable");
     expect(storedState()).toBe("active");
+  });
+
+  it("finishes an interrupted end without re-opening the gate", async () => {
+    await schedulePartyMode(partyInput(NOW, new Date(NOW.getTime() + 3_600_000)));
+    controller.holdGateOpenUntil.mockClear();
+    // Simulate a restart while the end request was in flight.
+    database.update(partyModeTable).set({ state: "ending", updatedAt: new Date(NOW.getTime() - 60_000).toISOString() })
+      .where(eq(partyModeTable.id, 1)).run();
+
+    expect(getPartyMode()?.state).toBe("active");
+    expect(await reconcilePartyMode()).toBeNull();
+    expect(storedState()).toBe("cancelled");
+    expect(controller.endGateHoldOpen).toHaveBeenCalledOnce();
+    expect(controller.holdGateOpenUntil).not.toHaveBeenCalled();
+  });
+
+  it("does not let a second end request race an in-flight one", async () => {
+    await schedulePartyMode(partyInput(NOW, new Date(NOW.getTime() + 3_600_000)));
+    database.update(partyModeTable).set({ state: "ending" }).where(eq(partyModeTable.id, 1)).run();
+
+    await expect(endPartyMode({ householdId: "home-a", isSystemAdmin: false }))
+      .rejects.toBeInstanceOf(PartyModeConflictError);
+    expect(controller.endGateHoldOpen).not.toHaveBeenCalled();
+  });
+
+  it("reads party mode without contacting the controller", async () => {
+    await schedulePartyMode(partyInput(
+      new Date(NOW.getTime() + 60_000),
+      new Date(NOW.getTime() + 3_600_000),
+    ));
+    vi.setSystemTime(new Date(NOW.getTime() + 120_000));
+
+    expect(getPartyMode()?.state).toBe("scheduled");
+    expect(storedState()).toBe("scheduled");
+    expect(controller.holdGateOpenUntil).not.toHaveBeenCalled();
   });
 });

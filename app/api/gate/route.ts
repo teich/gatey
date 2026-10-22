@@ -35,17 +35,15 @@ export async function POST(request: Request) {
   try {
     status = await unlockGate({ id: user.id, name: user.name || "Gatey resident" });
   } catch {
-    try { recordAuditEvent({ ...auditInput, outcome: "failed", details: {} }); } catch { /* Preserve the physical-action result even if local logging is unavailable. */ }
+    recordAuditEvent({ ...auditInput, outcome: "failed", details: {} });
     return Response.json({ error: "Gate could not be opened. Try again." }, { status: 503, headers: noStoreHeaders });
   }
 
-  try {
-    recordAuditEvent({
-      ...auditInput,
-      outcome: "succeeded",
-      details: { state: status.state, position: status.position, relay: status.relay },
-    });
-  } catch { /* The controller already accepted the action; do not report it as a failure. */ }
+  recordAuditEvent({
+    ...auditInput,
+    outcome: "succeeded",
+    details: { state: status.state, position: status.position, relay: status.relay },
+  });
 
   return Response.json(status, { headers: noStoreHeaders });
 }

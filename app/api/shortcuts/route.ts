@@ -1,5 +1,5 @@
 import { authorizeHouseholdRequest } from "@/lib/api-authorization";
-import { createShortcutConnection, getShortcutConnection, isShortcutSetupRequest, revokeShortcutConnection, shortcutHeaders } from "@/lib/shortcuts";
+import { createShortcutConnection, getShortcutConnection, revokeShortcutConnection, shortcutHeaders } from "@/lib/shortcuts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +12,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isShortcutSetupRequest(request)) return Response.json({ error: "Open shortcut setup in Gatey to connect." }, { status: 403, headers: shortcutHeaders });
   const authorization = await authorizeHouseholdRequest(request);
   if (authorization.response) return authorization.response;
   const { session, household } = authorization.context;
@@ -20,7 +19,6 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!isShortcutSetupRequest(request)) return Response.json({ error: "Open shortcut setup in Gatey to disconnect." }, { status: 403, headers: shortcutHeaders });
   const authorization = await authorizeHouseholdRequest(request);
   if (authorization.response) return authorization.response;
   const { session, household } = authorization.context;

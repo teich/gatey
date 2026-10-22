@@ -3,6 +3,7 @@ import "server-only";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { database } from "@/lib/database";
+import { appOrigin } from "@/lib/request-origin";
 import { member, organization, shortcutConnections, shortcutPairings, user } from "@/lib/schema";
 
 const hash = (secret: string) => createHash("sha256").update(secret).digest("hex");
@@ -11,17 +12,11 @@ export const SHORTCUT_COOLDOWN_MS = 30_000;
 export const shortcutHeaders = { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" };
 
 export function shortcutBaseUrl() {
-  const url = new URL(process.env.BETTER_AUTH_URL || "http://localhost:3000");
+  const url = new URL(appOrigin());
   if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) {
     throw new Error("Shortcut setup requires an HTTPS BETTER_AUTH_URL.");
   }
   return url.origin;
-}
-
-// Cookie-authenticated mutations must originate in Gatey. Native requests use
-// a separate endpoint and a personal opening token.
-export function isShortcutSetupRequest(request: Request) {
-  return request.headers.get("origin") === shortcutBaseUrl();
 }
 
 function activeResident(userId: string, householdId: string) {

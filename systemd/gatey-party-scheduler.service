@@ -8,4 +8,6 @@ Type=oneshot
 User=gatey
 Group=gatey
 EnvironmentFile=/etc/gatey/gatey.env
-ExecStart=/usr/bin/curl --fail --silent --show-error --max-time 20 --request POST --header "Authorization: Bearer ${GATEY_SCHEDULER_SECRET}" http://127.0.0.1:3000/api/internal/party-reconcile
+# The secret goes to curl on stdin (echo is a shell builtin), so it never
+# appears in the process list.
+ExecStart=/bin/sh -c 'echo "Authorization: Bearer $$GATEY_SCHEDULER_SECRET" | exec /usr/bin/curl --fail --silent --show-error --max-time 20 --request POST --header @- http://127.0.0.1:3000/api/internal/party-reconcile'

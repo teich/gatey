@@ -7,7 +7,10 @@ import { formatGateyDateTime, gateyDateKey } from "@/lib/date-time";
 import { partyMode } from "@/lib/schema";
 import { endGateHoldOpen, holdGateOpenUntil } from "@/lib/unifi-access";
 
-type PartyState = "scheduled" | "starting" | "active" | "failed" | "ended" | "cancelled";
+// "starting" and "ending" mark a controller request in flight. If one outlives
+// RECOVERY_DELAY_MS (the process restarted mid-request), reconciliation repeats
+// that same request, so an interrupted end can never re-open the gate.
+type PartyState = "scheduled" | "starting" | "active" | "ending" | "failed" | "ended" | "cancelled";
 
 type PartyRow = typeof partyMode.$inferSelect;
 
@@ -26,16 +29,20 @@ export class PartyModeValidationError extends Error {}
 const globalForPartyMode = globalThis as unknown as {
   gateyPartyTimer?: ReturnType<typeof setTimeout>;
 };
-const STARTING_RECOVERY_DELAY_MS = 30_000;
+const RECOVERY_DELAY_MS = 30_000;
+const LIVE_STATES: PartyState[] = ["scheduled", "starting", "active", "ending"];
 
 function currentRow(): PartyRow | undefined {
   return database.select().from(partyMode).where(eq(partyMode.id, 1)).get();
 }
 
-function asPartyMode(row: PartyRow | undefined): PartyMode | null {
-  if (!row || (row.state !== "scheduled" && row.state !== "active")) return null;
+function asPartyMode(row: PartyRow | undefined, now = Date.now()): PartyMode | null {
+  if (!row || new Date(row.endsAt).getTime() <= now) return null;
+  // The gate stays held while an end request is in flight.
+  const state = row.state === "scheduled" ? "scheduled" : row.state === "active" || row.state === "ending" ? "active" : null;
+  if (!state) return null;
   return {
-    state: row.state,
+    state,
     startsAt: row.startsAt,
     endsAt: row.endsAt,
     householdId: row.householdId,
@@ -47,104 +54,70 @@ function updatePartyState(state: PartyState) {
   database.update(partyMode).set({ state, updatedAt: new Date().toISOString() }).where(eq(partyMode.id, 1)).run();
 }
 
+// Moves the row from `from` to `to` only if nobody changed it since `row` was
+// read, so concurrent reconciliations act on a transition exactly once.
+function claimTransition(row: PartyRow, from: PartyState, to: PartyState, options: { stale?: boolean } = {}) {
+  return database.transaction(() => {
+    const current = currentRow();
+    if (!current || current.state !== from || current.updatedAt !== row.updatedAt) return false;
+    if (options.stale && Date.now() - new Date(current.updatedAt).getTime() < RECOVERY_DELAY_MS) return false;
+    updatePartyState(to);
+    return true;
+  }, { behavior: "immediate" });
+}
+
+function auditParty(row: PartyRow, action: string, outcome: "succeeded" | "failed", details: Record<string, string>) {
+  recordAuditEvent({
+    actorUserId: row.actorUserId,
+    actorName: row.actorName,
+    householdId: row.householdId,
+    householdName: row.householdName,
+    action,
+    outcome,
+    details,
+  });
+}
+
 function isToday(date: Date, now: Date) {
   return gateyDateKey(date) === gateyDateKey(now);
 }
 
 function armPartyTimer(row = currentRow()) {
   if (globalForPartyMode.gateyPartyTimer) clearTimeout(globalForPartyMode.gateyPartyTimer);
-  if (!row || !["scheduled", "starting", "active"].includes(row.state)) return;
+  if (!row || !LIVE_STATES.includes(row.state)) return;
 
   const target = row.state === "scheduled"
     ? new Date(row.startsAt).getTime()
-    : row.state === "starting"
-      ? new Date(row.updatedAt).getTime() + STARTING_RECOVERY_DELAY_MS
-      : new Date(row.endsAt).getTime();
+    : row.state === "active"
+      ? new Date(row.endsAt).getTime()
+      : new Date(row.updatedAt).getTime() + RECOVERY_DELAY_MS;
   const delay = Math.max(0, Math.min(target - Date.now(), 2_147_000_000));
-  globalForPartyMode.gateyPartyTimer = setTimeout(() => void reconcilePartyMode(), delay);
+  globalForPartyMode.gateyPartyTimer = setTimeout(() => void reconcilePartyMode().catch((error) => {
+    console.error("Party-mode reconciliation failed", error);
+  }), delay);
 }
 
-async function startDuePartyMode(row: PartyRow) {
-  const claimed = database.transaction(() => {
-    const current = currentRow();
-    if (!current || current.state !== "scheduled" || current.updatedAt !== row.updatedAt) {
-      return false;
-    }
-    updatePartyState("starting");
-    return true;
-  }, { behavior: "immediate" });
-  if (!claimed) return;
-
+// Call only after claiming the "starting" state.
+async function applyHold(row: PartyRow, source: string) {
+  const details = { startsAt: row.startsAt, endsAt: row.endsAt, source };
   try {
     await holdGateOpenUntil(new Date(row.endsAt));
     updatePartyState("active");
-    try {
-      recordAuditEvent({
-        actorUserId: row.actorUserId,
-        actorName: row.actorName,
-        householdId: row.householdId,
-        householdName: row.householdName,
-        action: "party.started",
-        outcome: "succeeded",
-        details: { startsAt: row.startsAt, endsAt: row.endsAt, source: "scheduler" },
-      });
-    } catch { /* The controller already accepted the hold; keep its true state. */ }
+    auditParty(row, "party.started", "succeeded", details);
   } catch {
     updatePartyState("failed");
-    try {
-      recordAuditEvent({
-        actorUserId: row.actorUserId,
-        actorName: row.actorName,
-        householdId: row.householdId,
-        householdName: row.householdName,
-        action: "party.started",
-        outcome: "failed",
-        details: { startsAt: row.startsAt, endsAt: row.endsAt, source: "scheduler" },
-      });
-    } catch { /* Preserve the failed controller result if local logging is unavailable. */ }
+    auditParty(row, "party.started", "failed", details);
   }
 }
 
-function claimStalledPartyStart(row: PartyRow) {
-  return database.transaction(() => {
-    const current = currentRow();
-    if (!current || current.state !== "starting" || current.updatedAt !== row.updatedAt) return false;
-    if (Date.now() - new Date(current.updatedAt).getTime() < STARTING_RECOVERY_DELAY_MS) return false;
-    updatePartyState("starting");
-    return true;
-  }, { behavior: "immediate" });
-}
-
-async function recoverStalledPartyStart(row: PartyRow) {
-  if (!claimStalledPartyStart(row)) return;
-
+// Call only after claiming the "ending" state. A failure leaves the hold active.
+async function releaseHold() {
   try {
-    await holdGateOpenUntil(new Date(row.endsAt));
+    await endGateHoldOpen();
+    updatePartyState("cancelled");
+  } catch (error) {
     updatePartyState("active");
-    try {
-      recordAuditEvent({
-        actorUserId: row.actorUserId,
-        actorName: row.actorName,
-        householdId: row.householdId,
-        householdName: row.householdName,
-        action: "party.started",
-        outcome: "succeeded",
-        details: { startsAt: row.startsAt, endsAt: row.endsAt, source: "recovery" },
-      });
-    } catch { /* The recovered controller hold is authoritative. */ }
-  } catch {
-    updatePartyState("failed");
-    try {
-      recordAuditEvent({
-        actorUserId: row.actorUserId,
-        actorName: row.actorName,
-        householdId: row.householdId,
-        householdName: row.householdName,
-        action: "party.started",
-        outcome: "failed",
-        details: { startsAt: row.startsAt, endsAt: row.endsAt, source: "recovery" },
-      });
-    } catch { /* Preserve the failed recovery result if logging is unavailable. */ }
+    throw error;
   }
 }
 
@@ -155,36 +128,35 @@ export async function reconcilePartyMode(): Promise<PartyMode | null> {
   const startsAt = new Date(row.startsAt).getTime();
   const endsAt = new Date(row.endsAt).getTime();
 
-  if (endsAt <= now && ["scheduled", "starting", "active"].includes(row.state)) {
+  if (endsAt <= now && LIVE_STATES.includes(row.state)) {
     updatePartyState("ended");
-    if (row.state === "active") {
-      try {
-        recordAuditEvent({
-          actorUserId: row.actorUserId,
-          actorName: row.actorName,
-          householdId: row.householdId,
-          householdName: row.householdName,
-          action: "party.ended",
-          outcome: "succeeded",
-          details: { endsAt: row.endsAt, source: "controller schedule" },
-        });
-      } catch { /* The controller's automatic close remains authoritative. */ }
+    if (row.state === "active" || row.state === "ending") {
+      auditParty(row, "party.ended", "succeeded", { endsAt: row.endsAt, source: "controller schedule" });
     }
-    row = currentRow();
   } else if (row.state === "scheduled" && startsAt <= now) {
-    await startDuePartyMode(row);
-    row = currentRow();
+    if (claimTransition(row, "scheduled", "starting")) await applyHold(row, "scheduler");
   } else if (row.state === "starting") {
-    await recoverStalledPartyStart(row);
-    row = currentRow();
+    if (claimTransition(row, "starting", "starting", { stale: true })) await applyHold(row, "recovery");
+  } else if (row.state === "ending") {
+    if (claimTransition(row, "ending", "ending", { stale: true })) {
+      try {
+        await releaseHold();
+        auditParty(row, "party.ended", "succeeded", { endsAt: row.endsAt, source: "recovery" });
+      } catch {
+        auditParty(row, "party.ended", "failed", { endsAt: row.endsAt, source: "recovery" });
+      }
+    }
   }
 
+  row = currentRow();
   armPartyTimer(row);
   return asPartyMode(row);
 }
 
-export async function getPartyMode() {
-  return reconcilePartyMode();
+// Read-only: the in-process timer, startup recovery and the systemd timer move
+// the state machine, so viewing party mode never touches the controller.
+export function getPartyMode(): PartyMode | null {
+  return asPartyMode(currentRow());
 }
 
 export async function schedulePartyMode(input: {
@@ -202,7 +174,7 @@ export async function schedulePartyMode(input: {
 
   database.transaction((tx) => {
     const existing = currentRow();
-    if (existing && ["scheduled", "starting", "active"].includes(existing.state) && new Date(existing.endsAt) > now) {
+    if (existing && LIVE_STATES.includes(existing.state) && new Date(existing.endsAt) > now) {
       throw new PartyModeConflictError(`Party mode is already planned by ${existing.householdName} until ${formatGateyDateTime(existing.endsAt, { hour: "numeric", minute: "2-digit" })}.`);
     }
     const timestamp = now.toISOString();
@@ -262,20 +234,16 @@ export async function endPartyMode(input: { householdId: string; isSystemAdmin: 
   const row = currentRow();
   if (!row) throw new PartyModeValidationError("There is no current party mode to end.");
   if (row.state === "scheduled") {
-    updatePartyState("cancelled");
+    if (!claimTransition(row, "scheduled", "cancelled")) throw new PartyModeConflictError("Party mode changed while it was being cancelled. Try again.");
     armPartyTimer();
     return party;
   }
+  if (!claimTransition(row, "active", "ending")) throw new PartyModeConflictError("Party mode is already being ended.");
 
-  updatePartyState("starting");
   try {
-    await endGateHoldOpen();
-    updatePartyState("cancelled");
-    armPartyTimer();
+    await releaseHold();
     return party;
-  } catch (error) {
-    updatePartyState("active");
+  } finally {
     armPartyTimer();
-    throw error;
   }
 }
