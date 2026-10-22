@@ -1,0 +1,9 @@
+# Generated or vendored files keep their upstream formatting.
+drizzle/
+components/ui/
+public/
+package-lock.json
+.next/
+data/
+# Rewritten by `next dev`.
+AGENTS.md
