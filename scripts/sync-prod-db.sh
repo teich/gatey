@@ -2,7 +2,14 @@
 
 set -euo pipefail
 
-prod_host="${GATEY_PROD_HOST:-root@192.168.2.93}"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The production host is kept in the local, gitignored .env rather than here.
+prod_host="${GATEY_PROD_HOST:-$(sed -n 's/^GATEY_PROD_HOST=//p' "$repo_root/.env" 2>/dev/null | tail -n 1 || true)}"
+if [[ -z "$prod_host" ]]; then
+  echo "Set GATEY_PROD_HOST (for example root@gatey.example.lan) in .env or the environment." >&2
+  exit 1
+fi
+
 remote_backup="/tmp/gatey-local-sync.sqlite"
 local_backup="$(mktemp /tmp/gatey-local-sync.XXXXXX.sqlite)"
 
