@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { HouseholdAdminRecord } from "@/lib/households";
+import { INITIAL_HOUSEHOLD_ID } from "@/lib/initial-household";
 
 async function requestJson(url: string, init: RequestInit) {
   const response = await fetch(url, init);
@@ -229,7 +230,7 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
               const unlinkedCount = household.members.filter((member) => !member.controllerUserId).length;
               const status = !household.members.length ? household.gateCode ? "PIN only" : "No access" : unlinkedCount ? "Needs a UniFi link" : "Set up";
               return <TableRow key={household.id} sortValues={{ household: household.name, slug: household.slug, people: household.members.length, visitors: household.visitorCount, gateCode: household.gateCode?.pin, status }}>
-                <TableCell><strong className="block font-medium">{household.name}</strong>{household.id === "oren-home" ? <span className="mt-1 block text-xs text-muted-foreground">Initial household</span> : null}</TableCell>
+                <TableCell><strong className="block font-medium">{household.name}</strong>{household.id === INITIAL_HOUSEHOLD_ID ? <span className="mt-1 block text-xs text-muted-foreground">Initial household</span> : null}</TableCell>
                 <TableCell><code className="rounded-md bg-muted px-2 py-1 text-xs">{household.slug}</code></TableCell>
                 <TableCell><span className="inline-flex items-center gap-1.5 font-medium"><UsersRound className="size-4 text-muted-foreground" />{peopleLabel(household.members.length)}</span></TableCell>
                 <TableCell>{household.visitorCount}</TableCell>
@@ -274,7 +275,7 @@ export function HouseholdManager({ households }: { households: HouseholdAdminRec
           </form>
           {currentCodePin ? <div className="flex flex-col gap-3 rounded-lg border border-destructive/20 bg-destructive/[.025] p-3 sm:flex-row sm:items-center sm:justify-between"><div><h4 className="text-sm font-semibold">Remove gate access</h4><p className="text-xs text-muted-foreground">The household code will stop working immediately.</p></div><Button type="button" variant="destructive" size="sm" disabled={working || codeWorking} onClick={() => void removeGateCode()}><Trash2 data-icon="inline-start" />Remove code</Button></div> : null}
         </section></> : null}
-        {editing?.id !== "oren-home" ? <><Separator /><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="text-sm font-semibold">Delete household</h3><p className="text-xs text-muted-foreground">Only empty households without Gatey records can be deleted.</p></div><Button type="button" variant="destructive" onClick={beginDelete} disabled={working || codeWorking}><Trash2 data-icon="inline-start" />Delete</Button></div></> : <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">The initial household cannot be deleted.</div>}
+        {editing?.id !== INITIAL_HOUSEHOLD_ID ? <><Separator /><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="text-sm font-semibold">Delete household</h3><p className="text-xs text-muted-foreground">Only empty households without Gatey records can be deleted.</p></div><Button type="button" variant="destructive" onClick={beginDelete} disabled={working || codeWorking}><Trash2 data-icon="inline-start" />Delete</Button></div></> : <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">The initial household cannot be deleted.</div>}
       </DialogContent>
     </Dialog>
 

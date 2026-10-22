@@ -1,6 +1,7 @@
 import "server-only";
 
 import { spawn } from "node:child_process";
+import { envFlag } from "@/lib/env";
 
 export const cameraNames = ["person", "road"] as const;
 export type CameraName = typeof cameraNames[number];
@@ -33,7 +34,7 @@ function cameraUrl(camera: CameraName) {
 }
 
 function usesPrivateCertificate() {
-  return ["1", "true", "yes"].includes((process.env.GATEY_CAMERA_INSECURE_TLS || "").toLowerCase());
+  return envFlag("GATEY_CAMERA_INSECURE_TLS");
 }
 
 export function isCameraName(value: string): value is CameraName {

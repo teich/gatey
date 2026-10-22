@@ -13,12 +13,10 @@ export async function POST(request: Request) {
   try {
     await unlockGate({ id: claim.userId, name: claim.actorName });
   } catch {
-    try { recordAuditEvent({ ...audit, outcome: "failed" }); } catch { /* Preserve controller outcome. */ }
+    recordAuditEvent({ ...audit, outcome: "failed" });
     return Response.json({ message: "Gate opening could not be confirmed. Check the gate in Gatey before trying again." }, { status: 503, headers: shortcutHeaders });
   }
-  try {
-    markShortcutUsed(claim.connectionId);
-    recordAuditEvent({ ...audit, outcome: "succeeded" });
-  } catch { /* The controller already accepted the request. */ }
+  try { markShortcutUsed(claim.connectionId); } catch { /* The controller already accepted the request. */ }
+  recordAuditEvent({ ...audit, outcome: "succeeded" });
   return Response.json({ ok: true, message: "Gate opening requested." }, { headers: shortcutHeaders });
 }

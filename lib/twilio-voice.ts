@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { recordAuditEvent } from "@/lib/audit-log";
+import { envFlag } from "@/lib/env";
 import { findAuthorizedPhoneCaller, type AuthorizedPhoneCaller } from "@/lib/phone-access";
 import { startPhoneHold } from "@/lib/party-mode";
 import { beginTwilioAction, finishTwilioAction, recordTwilioEvent, type TwilioAction } from "@/lib/twilio-activity";
@@ -9,6 +10,16 @@ import { unlockGate } from "@/lib/unifi-access";
 
 const HOLD_OPEN_MINUTES = 30;
 const MAX_BODY_BYTES = 16_384;
+
+// Twilio reports the STIR/SHAKEN result for the caller ID. Only full ("A")
+// attestation means the carrier vouches that the caller owns the number.
+// Weaker results are recorded but not blocked, to learn whether spoofed calls
+// ever arrive before deciding to require a PIN for them.
+const VERIFIED_CALLER_ID = "TN-Validation-Passed-A";
+
+function callerIdVerification(form: URLSearchParams) {
+  return form.get("StirVerstat")?.trim() || "No STIR/SHAKEN result";
+}
 
 function escapeXml(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
@@ -46,7 +57,7 @@ function validSignature(signature: string, url: string, params: URLSearchParams,
 }
 
 async function readSignedForm(request: Request, pathname: string): Promise<URLSearchParams | Response> {
-  if (process.env.GATEY_TWILIO_ENABLED?.toLowerCase() !== "true") return new Response("not found", { status: 404 });
+  if (!envFlag("GATEY_TWILIO_ENABLED")) return new Response("not found", { status: 404 });
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!authToken) return new Response("unavailable", { status: 503 });
   const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
@@ -85,12 +96,15 @@ export async function handleTwilioVoice(request: Request) {
   if (form instanceof Response) return form;
   const from = form.get("From") || "";
   const callSid = (form.get("CallSid") || "").trim();
+  const verification = callerIdVerification(form);
   const caller = findAuthorizedPhoneCaller(from);
   if (!caller) {
-    recordTwilioEvent({ event: "caller_blocked", callerE164: from, callSid });
+    recordTwilioEvent({ event: "caller_blocked", detail: `Caller ID: ${verification}`, callerE164: from, callSid });
     return xml(twimlSay("This incoming number is not authorized for this gate."));
   }
-  recordTwilioEvent({ event: "caller_prompted", callerE164: caller.phoneE164, callSid, actorUserId: caller.userId, householdId: caller.householdId });
+  const callerEvent = { callerE164: caller.phoneE164, callSid, actorUserId: caller.userId, householdId: caller.householdId };
+  if (verification !== VERIFIED_CALLER_ID) recordTwilioEvent({ ...callerEvent, event: "caller_unverified", detail: verification });
+  recordTwilioEvent({ ...callerEvent, event: "caller_prompted", detail: `Caller ID: ${verification}` });
   return xml(twimlGather(callerPrompt(caller)));
 }
 
@@ -106,6 +120,9 @@ export async function handleTwilioVoiceConfirmation(request: Request) {
   }
 
   const digit = (form.get("Digits") || "").trim();
+  // Twilio may not repeat StirVerstat on the Gather callback; the prompt event
+  // for this call already records it.
+  const callerId = form.get("StirVerstat")?.trim();
   const action: TwilioAction | undefined = digit === "1" ? "open" : digit === "2" ? "hold_open" : undefined;
   if (!action) {
     recordTwilioEvent({ event: "invalid_digit", detail: digit || "empty", callerE164: caller.phoneE164, callSid, actorUserId: caller.userId, householdId: caller.householdId });
@@ -128,7 +145,7 @@ export async function handleTwilioVoiceConfirmation(request: Request) {
     let detail = "";
     let successMessage = actionMessage(action, "succeeded");
     if (action === "open") {
-      const status = await unlockGate({ id: caller.userId, name: caller.userName, source: "twilio-voice", extra: { from: caller.phoneE164, call_sid: callSid, digit } });
+      const status = await unlockGate({ id: caller.userId, name: caller.userName, source: "twilio-voice", extra: { from: caller.phoneE164, call_sid: callSid, digit, ...(callerId ? { stir_verstat: callerId } : {}) } });
       detail = status.state;
     } else {
       const result = await startPhoneHold({ endsAt: new Date(Date.now() + HOLD_OPEN_MINUTES * 60_000), householdId: caller.householdId, householdName: caller.householdName, actorUserId: caller.userId, actorName: caller.userName });
@@ -137,13 +154,13 @@ export async function handleTwilioVoiceConfirmation(request: Request) {
     }
     finishTwilioAction(callSid, action, "succeeded", detail);
     recordTwilioEvent({ event: action === "open" ? "unlock_success" : "hold_open", detail, callerE164: caller.phoneE164, callSid, actorUserId: caller.userId, householdId: caller.householdId });
-    try { recordAuditEvent({ actorUserId: caller.userId, actorName: caller.userName, householdId: caller.householdId, householdName: caller.householdName, action: action === "open" ? "gate.open" : "party.enabled", outcome: "succeeded", details: { source: "twilio", callSid, phone: caller.phoneE164, result: detail } }); } catch { /* The physical action is authoritative. */ }
+    recordAuditEvent({ actorUserId: caller.userId, actorName: caller.userName, householdId: caller.householdId, householdName: caller.householdName, action: action === "open" ? "gate.open" : "party.enabled", outcome: "succeeded", details: { source: "twilio", callSid, phone: caller.phoneE164, result: detail, ...(callerId ? { callerId } : {}) } });
     return xml(twimlSay(successMessage));
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Gate action failed.";
     finishTwilioAction(callSid, action, "failed", detail);
     recordTwilioEvent({ event: action === "open" ? "unlock_failed" : "action_failed", detail, callerE164: caller.phoneE164, callSid, actorUserId: caller.userId, householdId: caller.householdId });
-    try { recordAuditEvent({ actorUserId: caller.userId, actorName: caller.userName, householdId: caller.householdId, householdName: caller.householdName, action: action === "open" ? "gate.open" : "party.enabled", outcome: "failed", details: { source: "twilio", callSid, phone: caller.phoneE164 } }); } catch { /* Keep the controller outcome. */ }
+    recordAuditEvent({ actorUserId: caller.userId, actorName: caller.userName, householdId: caller.householdId, householdName: caller.householdName, action: action === "open" ? "gate.open" : "party.enabled", outcome: "failed", details: { source: "twilio", callSid, phone: caller.phoneE164, ...(callerId ? { callerId } : {}) } });
     return xml(twimlSay(actionMessage(action, "failed")));
   }
 }

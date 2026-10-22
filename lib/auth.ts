@@ -5,11 +5,17 @@ import { admin, organization, username } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { and, eq, ne } from "drizzle-orm";
 import { database } from "./database.ts";
+import { INITIAL_HOUSEHOLD_ID } from "./initial-household.ts";
 import * as schema from "./schema.ts";
 
-export const BOOTSTRAP_ADMIN_EMAIL = "oren@teich.net";
-export const BOOTSTRAP_ADMIN_USERNAME = "oren";
-export const BOOTSTRAP_HOUSEHOLD_ID = "oren-home";
+// The first administrator comes from the environment so the repository holds
+// no personal details. Both are required by `npm run auth:create-admin`.
+export function bootstrapAdmin() {
+  const email = process.env.GATEY_ADMIN_EMAIL?.trim().toLowerCase();
+  const username = process.env.GATEY_ADMIN_USERNAME?.trim().toLowerCase();
+  if (!email || !username) return null;
+  return { email, username, name: process.env.GATEY_ADMIN_NAME?.trim() || username };
+}
 
 type CreatedUser = {
   id: string;
@@ -62,7 +68,7 @@ export const auth = betterAuth({
       allowUserToCreateOrganization: (user) => String(user.role ?? "").split(",").includes("admin"),
       organizationHooks: {
         beforeDeleteOrganization: async ({ organization, user }) => {
-          if (organization.id === BOOTSTRAP_HOUSEHOLD_ID) {
+          if (organization.id === INITIAL_HOUSEHOLD_ID) {
             throw APIError.fromStatus("BAD_REQUEST", { message: "The initial Gatey household cannot be deleted." });
           }
           const otherMember = database.select({ id: schema.member.id }).from(schema.member)
@@ -80,18 +86,19 @@ export const auth = betterAuth({
 });
 
 addBootstrapOwner = async (user) => {
-  const isBootstrapAdmin = user.email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL || user.username?.toLowerCase() === BOOTSTRAP_ADMIN_USERNAME;
+  const admin = bootstrapAdmin();
+  const isBootstrapAdmin = admin && (user.email.toLowerCase() === admin.email || user.username?.toLowerCase() === admin.username);
   if (!isBootstrapAdmin) return;
 
   const existing = database.select({ id: schema.member.id }).from(schema.member)
-    .where(and(eq(schema.member.userId, user.id), eq(schema.member.organizationId, BOOTSTRAP_HOUSEHOLD_ID))).get();
+    .where(and(eq(schema.member.userId, user.id), eq(schema.member.organizationId, INITIAL_HOUSEHOLD_ID))).get();
   if (existing) return;
 
   await auth.api.addMember({
     body: {
       userId: user.id,
       role: "owner",
-      organizationId: BOOTSTRAP_HOUSEHOLD_ID,
+      organizationId: INITIAL_HOUSEHOLD_ID,
     },
   });
 };

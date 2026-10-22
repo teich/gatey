@@ -1,9 +1,5 @@
 import { emitKeypressEvents } from "node:readline";
-import {
-  auth,
-  BOOTSTRAP_ADMIN_EMAIL,
-  BOOTSTRAP_ADMIN_USERNAME,
-} from "../lib/auth.ts";
+import { auth, bootstrapAdmin } from "../lib/auth.ts";
 
 function readHidden(label) {
   if (!process.stdin.isTTY || !process.stdout.isTTY || typeof process.stdin.setRawMode !== "function") {
@@ -78,24 +74,26 @@ async function askForConfirmedPassword({ minPasswordLength, maxPasswordLength })
 }
 
 async function main() {
+  const admin = bootstrapAdmin();
+  if (!admin) throw new Error("Set GATEY_ADMIN_EMAIL and GATEY_ADMIN_USERNAME in .env first.");
   const context = await auth.$context;
-  const existing = await context.internalAdapter.findUserByEmail(BOOTSTRAP_ADMIN_EMAIL);
+  const existing = await context.internalAdapter.findUserByEmail(admin.email);
 
   console.log(existing
-    ? `Resetting the password for ${BOOTSTRAP_ADMIN_USERNAME} (${BOOTSTRAP_ADMIN_EMAIL}).`
-    : `Creating ${BOOTSTRAP_ADMIN_USERNAME} (${BOOTSTRAP_ADMIN_EMAIL}) as the Gatey administrator.`);
+    ? `Resetting the password for ${admin.username} (${admin.email}).`
+    : `Creating ${admin.username} (${admin.email}) as the Gatey administrator.`);
 
   const password = await askForConfirmedPassword(context.password.config);
 
   if (!existing) {
     await auth.api.createUser({
       body: {
-        email: BOOTSTRAP_ADMIN_EMAIL,
+        email: admin.email,
         password,
-        name: "Oren",
+        name: admin.name,
         role: "admin",
         data: {
-          username: BOOTSTRAP_ADMIN_USERNAME,
+          username: admin.username,
           emailVerified: true,
         },
       },
@@ -106,7 +104,7 @@ async function main() {
 
   const credentialAccount = await context.internalAdapter.findCredentialAccount(existing.user.id);
   if (!credentialAccount) {
-    throw new Error("Oren exists without a password account. Refusing to modify an unexpected account shape.");
+    throw new Error(`${admin.username} exists without a password account. Refusing to modify an unexpected account shape.`);
   }
 
   const passwordHash = await context.password.hash(password);

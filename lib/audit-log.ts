@@ -17,7 +17,17 @@ export type AuditEvent = {
   details: Record<string, string | null>;
 };
 
+// Audit logging records what already happened, usually after the controller
+// accepted a physical action, so a logging failure is reported but never thrown.
 export function recordAuditEvent(input: Omit<AuditEvent, "id" | "occurredAt"> & { details?: Record<string, string | null> }) {
+  try {
+    insertAuditEvent(input);
+  } catch (error) {
+    console.error("Gatey could not record an audit event", { action: input.action, outcome: input.outcome, error });
+  }
+}
+
+function insertAuditEvent(input: Omit<AuditEvent, "id" | "occurredAt"> & { details?: Record<string, string | null> }) {
   database.insert(auditEvents).values({
     id: randomUUID(),
     occurredAt: new Date().toISOString(),

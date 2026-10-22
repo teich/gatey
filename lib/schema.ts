@@ -181,7 +181,7 @@ export const auditEvents = table("audit_events", {
 
 export const partyMode = table("party_mode", {
   id: integer().primaryKey(),
-  state: text({ enum: ["scheduled", "starting", "active", "failed", "ended", "cancelled"] }).notNull(),
+  state: text({ enum: ["scheduled", "starting", "active", "ending", "failed", "ended", "cancelled"] }).notNull(),
   startsAt: text().notNull(),
   endsAt: text().notNull(),
   householdId: text().notNull().references(() => organization.id, { onDelete: "restrict" }),

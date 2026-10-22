@@ -8,6 +8,7 @@ import { sqlite } from "@/lib/database";
 import { claimShortcutOpen, createShortcutConnection, getShortcutConnection, revokeShortcutConnection, SHORTCUT_COOLDOWN_MS } from "@/lib/shortcuts";
 import { POST as open } from "@/app/api/shortcuts/open/route";
 import { GET, POST, DELETE } from "@/app/api/shortcuts/route";
+import { rejectsCrossOriginMutation } from "@/lib/request-origin";
 
 function connect(userId = "alice", householdId = "home", now = Date.now()) {
   return createShortcutConnection(userId, householdId, now);
@@ -109,11 +110,16 @@ describe("shortcut routes", () => {
     expect(sqlite.prepare("SELECT outcome FROM audit_events").get()?.outcome).toBe("failed");
   });
 
-  it("protects setup mutations from cross-origin requests", async () => {
-    for (const origin of ["https://evil.test", "null", ""]) {
-      expect((await POST(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin } }))).status).toBe(403);
-      expect((await DELETE(new Request("https://gatey.test/api/shortcuts", { method: "DELETE", headers: { origin } }))).status).toBe(403);
+  it("protects setup mutations from cross-origin requests", () => {
+    for (const origin of ["https://evil.test", "https://other.gatey.test", "null", ""]) {
+      for (const method of ["POST", "DELETE"]) {
+        expect(rejectsCrossOriginMutation(new Request("https://gatey.test/api/shortcuts", { method, headers: { origin } }))).toBe(true);
+      }
     }
+    expect(rejectsCrossOriginMutation(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }))).toBe(false);
+    expect(rejectsCrossOriginMutation(new Request("https://gatey.test/api/shortcuts"))).toBe(false);
+    // The native shortcut authenticates with its own bearer token.
+    expect(rejectsCrossOriginMutation(openRequest("token"))).toBe(false);
   });
 
   it("requires a web session to manage access and never lists secrets", async () => {

@@ -17,7 +17,7 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pe
     if (!person) return Response.json({ error: "UniFi person not found." }, { status: 404 });
     const actor = authorization.context.session.user;
     markUnifiServiceAccount({ controllerUserId: id, label: person.name, actorUserId: actor.id, actorName: actor.name || "Gatey administrator" });
-    try { recordAuditEvent({ actorUserId: actor.id, actorName: actor.name || "Gatey administrator", householdId: null, householdName: null, action: "person.service-account-marked", outcome: "succeeded", details: { person: person.name, controllerUserId: id } }); } catch { /* Preserve the classification if audit logging is unavailable. */ }
+    recordAuditEvent({ actorUserId: actor.id, actorName: actor.name || "Gatey administrator", householdId: null, householdName: null, action: "person.service-account-marked", outcome: "succeeded", details: { person: person.name, controllerUserId: id } });
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not classify this service account." }, { status: 400 });
@@ -32,6 +32,6 @@ export async function DELETE(request: Request, context: RouteContext<"/api/admin
   const existing = listUnifiServiceAccounts().get(id);
   if (!existing || !restoreUnifiServiceAccount(id)) return Response.json({ error: "Service account classification not found." }, { status: 404 });
   const actor = authorization.context.session.user;
-  try { recordAuditEvent({ actorUserId: actor.id, actorName: actor.name || "Gatey administrator", householdId: null, householdName: null, action: "person.service-account-restored", outcome: "succeeded", details: { person: existing.label, controllerUserId: id } }); } catch { /* Preserve the restore if audit logging is unavailable. */ }
+  recordAuditEvent({ actorUserId: actor.id, actorName: actor.name || "Gatey administrator", householdId: null, householdName: null, action: "person.service-account-restored", outcome: "succeeded", details: { person: existing.label, controllerUserId: id } });
   return new Response(null, { status: 204 });
 }

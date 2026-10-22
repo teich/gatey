@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { migrateVisitorGateCode } from "@/lib/unifi-access";
+import { forgetGateDoor, migrateVisitorGateCode } from "@/lib/unifi-access";
 
 type Envelope = { code: string; data?: unknown; msg?: string };
 
@@ -23,6 +23,7 @@ describe("UniFi visitor PIN migration", () => {
     process.env.UNIFI_ACCESS_API_TOKEN = "token";
     process.env.UNIFI_DOOR_NAME = "Gate";
     delete process.env.UNIFI_INSECURE_TLS;
+    forgetGateDoor();
   });
 
   afterEach(() => vi.unstubAllGlobals());

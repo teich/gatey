@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   if (authorization.response) return authorization.response;
 
   try {
-    const party = await getPartyMode();
+    const party = getPartyMode();
     return Response.json({ party, canEnd: party ? party.householdId === authorization.context.household.id || authorization.context.isSystemAdmin : false }, { headers: noStoreHeaders });
   } catch {
     return Response.json({ error: "Party mode is unavailable." }, { status: 503, headers: noStoreHeaders });
@@ -54,27 +54,23 @@ export async function POST(request: Request) {
       actorUserId: auditInput.actorUserId,
       actorName: auditInput.actorName,
     });
-    try {
-      recordAuditEvent({
-        ...auditInput,
-        action: party?.state === "scheduled" ? "party.scheduled" : "party.enabled",
-        outcome: "succeeded",
-        details: { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() },
-      });
-    } catch { /* Preserve the actual party-mode result if local logging is unavailable. */ }
+    recordAuditEvent({
+      ...auditInput,
+      action: party?.state === "scheduled" ? "party.scheduled" : "party.enabled",
+      outcome: "succeeded",
+      details: { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() },
+    });
     return Response.json({ party, canEnd: true }, { headers: noStoreHeaders });
   } catch (error) {
-    try {
-      recordAuditEvent({
-        ...auditInput,
-        action: startsAt && startsAt > new Date() ? "party.scheduled" : "party.enabled",
-        outcome: "failed",
-        details: {
-          ...(startsAt && !Number.isNaN(startsAt.valueOf()) ? { startsAt: startsAt.toISOString() } : {}),
-          ...(endsAt && !Number.isNaN(endsAt.valueOf()) ? { endsAt: endsAt.toISOString() } : {}),
-        },
-      });
-    } catch { /* Preserve the actual party-mode result if local logging is unavailable. */ }
+    recordAuditEvent({
+      ...auditInput,
+      action: startsAt && startsAt > new Date() ? "party.scheduled" : "party.enabled",
+      outcome: "failed",
+      details: {
+        ...(startsAt && !Number.isNaN(startsAt.valueOf()) ? { startsAt: startsAt.toISOString() } : {}),
+        ...(endsAt && !Number.isNaN(endsAt.valueOf()) ? { endsAt: endsAt.toISOString() } : {}),
+      },
+    });
     return Response.json({ error: messageFor(error, "Party mode could not be enabled. Try again.") }, { status: errorStatus(error), headers: noStoreHeaders });
   }
 }
@@ -93,10 +89,10 @@ export async function DELETE(request: Request) {
 
   try {
     const party = await endPartyMode({ householdId: auditInput.householdId, isSystemAdmin: authorization.context.isSystemAdmin });
-    try { recordAuditEvent({ ...auditInput, action: party.state === "scheduled" ? "party.cancelled" : "party.ended", outcome: "succeeded", details: { startsAt: party.startsAt, endsAt: party.endsAt } }); } catch { /* Preserve the actual party-mode result if local logging is unavailable. */ }
+    recordAuditEvent({ ...auditInput, action: party.state === "scheduled" ? "party.cancelled" : "party.ended", outcome: "succeeded", details: { startsAt: party.startsAt, endsAt: party.endsAt } });
     return Response.json({ party: null, canEnd: false }, { headers: noStoreHeaders });
   } catch (error) {
-    try { recordAuditEvent({ ...auditInput, action: "party.ended", outcome: "failed", details: {} }); } catch { /* Preserve the actual party-mode result if local logging is unavailable. */ }
+    recordAuditEvent({ ...auditInput, action: "party.ended", outcome: "failed", details: {} });
     return Response.json({ error: messageFor(error, "Party mode could not be ended. Try again.") }, { status: errorStatus(error), headers: noStoreHeaders });
   }
 }

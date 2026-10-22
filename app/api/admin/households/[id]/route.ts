@@ -1,4 +1,4 @@
-import { BOOTSTRAP_HOUSEHOLD_ID } from "@/lib/auth";
+import { INITIAL_HOUSEHOLD_ID } from "@/lib/initial-household";
 import { authorizeAdminRequest } from "@/lib/api-authorization";
 import { deleteHousehold, getHousehold, householdHasGateyRecords, updateHousehold } from "@/lib/households";
 
@@ -38,7 +38,7 @@ export async function DELETE(request: Request, context: RouteContext<"/api/admin
   if (authorization.response) return authorization.response;
 
   const { id } = await context.params;
-  if (id === BOOTSTRAP_HOUSEHOLD_ID) {
+  if (id === INITIAL_HOUSEHOLD_ID) {
     return Response.json({ error: "The initial Gatey household cannot be deleted." }, { status: 400 });
   }
 
