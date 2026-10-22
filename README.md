@@ -78,6 +78,16 @@ npm run lint
 npm run build
 ```
 
+## Production deployment
+
+Production runs on the home Proxmox server (WTR), not on a hosting platform:
+
+- **Host:** LXC 107 `gatey` at `192.168.2.93`, DHCP-reserved. The app runs as `gatey.service` on port 3000, from `/opt/gatey`. Its environment is in `/etc/gatey/gatey.env` and its database in `/var/lib/gatey/gatey.sqlite`, with pre-deploy backups in `/var/lib/gatey/backups`.
+- **Public access:** `https://gate.d4f.com` goes through a Cloudflare Tunnel. In the Teich Cloudflare account, the `d4f.com` zone routes `gate` to the remotely managed tunnel `HOMELAB_PROD`. That tunnel's connector runs in LXC 106 `cloudflared-teich` and forwards to `http://192.168.2.93:3000`. No ports are open on the router.
+- **Configuration:** `BETTER_AUTH_URL` and `TWILIO_PUBLIC_BASE_URL` must be `https://gate.d4f.com`.
+
+To deploy, push to `main` and run `npm run deploy:prod`. It builds locally with Node 26, uploads the standalone build over SSH, backs up the database, runs migrations, and rolls back if the health check fails. To copy the production database to your machine, run `npm run sync:prod-db`. The server inventory and the tunnel connector are documented in the onas repo (`ops/INVENTORY.md`).
+
 ## iPhone arrival automation
 
 Open **More → Open on arrival** (or `/shortcuts`) on your iPhone:
