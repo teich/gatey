@@ -12,15 +12,35 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/pe
 
   try {
     const { id } = await context.params;
-    if (getPersonLink(id)) return Response.json({ error: "Remove this person's Gatey account link before classifying it as a service account." }, { status: 409 });
+    if (getPersonLink(id))
+      return Response.json(
+        { error: "Remove this person's Gatey account link before classifying it as a service account." },
+        { status: 409 },
+      );
     const person = (await listUserInventory()).find((item) => item.id === id);
     if (!person) return Response.json({ error: "UniFi person not found." }, { status: 404 });
     const actor = authorization.context.session.user;
-    markUnifiServiceAccount({ controllerUserId: id, label: person.name, actorUserId: actor.id, actorName: actor.name || "Gatey administrator" });
-    recordAuditEvent({ actorUserId: actor.id, actorName: actor.name || "Gatey administrator", householdId: null, householdName: null, action: "person.service-account-marked", outcome: "succeeded", details: { person: person.name, controllerUserId: id } });
+    markUnifiServiceAccount({
+      controllerUserId: id,
+      label: person.name,
+      actorUserId: actor.id,
+      actorName: actor.name || "Gatey administrator",
+    });
+    recordAuditEvent({
+      actorUserId: actor.id,
+      actorName: actor.name || "Gatey administrator",
+      householdId: null,
+      householdName: null,
+      action: "person.service-account-marked",
+      outcome: "succeeded",
+      details: { person: person.name, controllerUserId: id },
+    });
     return Response.json({ ok: true });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not classify this service account." }, { status: 400 });
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Could not classify this service account." },
+      { status: 400 },
+    );
   }
 }
 
@@ -30,8 +50,17 @@ export async function DELETE(request: Request, context: RouteContext<"/api/admin
 
   const { id } = await context.params;
   const existing = listUnifiServiceAccounts().get(id);
-  if (!existing || !restoreUnifiServiceAccount(id)) return Response.json({ error: "Service account classification not found." }, { status: 404 });
+  if (!existing || !restoreUnifiServiceAccount(id))
+    return Response.json({ error: "Service account classification not found." }, { status: 404 });
   const actor = authorization.context.session.user;
-  recordAuditEvent({ actorUserId: actor.id, actorName: actor.name || "Gatey administrator", householdId: null, householdName: null, action: "person.service-account-restored", outcome: "succeeded", details: { person: existing.label, controllerUserId: id } });
+  recordAuditEvent({
+    actorUserId: actor.id,
+    actorName: actor.name || "Gatey administrator",
+    householdId: null,
+    householdName: null,
+    action: "person.service-account-restored",
+    outcome: "succeeded",
+    details: { person: existing.label, controllerUserId: id },
+  });
   return new Response(null, { status: 204 });
 }

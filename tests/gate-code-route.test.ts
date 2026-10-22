@@ -75,7 +75,10 @@ describe("household-scoped gate-code routes", () => {
   };
 
   function patchPin(pin: string) {
-    return PATCH(new Request("https://gatey.test/api/gate-codes/code-a", { method: "PATCH", body: JSON.stringify({ pin }) }), context("code-a"));
+    return PATCH(
+      new Request("https://gatey.test/api/gate-codes/code-a", { method: "PATCH", body: JSON.stringify({ pin }) }),
+      context("code-a"),
+    );
   }
 
   it("does not confirm that a conflicting PIN belongs to another household, and audits the attempt", async () => {
@@ -86,7 +89,9 @@ describe("household-scoped gate-code routes", () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({ error: "This code can't be used. Choose a different one." });
-    expect(dependencies.recordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({ action: "gate-code.pin-unavailable", householdId: "home-a" }));
+    expect(dependencies.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "gate-code.pin-unavailable", householdId: "home-a" }),
+    );
     expect(dependencies.replaceVisitorPin).not.toHaveBeenCalled();
   });
 

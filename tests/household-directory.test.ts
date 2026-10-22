@@ -22,15 +22,48 @@ describe("household directory access summaries", () => {
     const now = new Date();
     const nowIso = now.toISOString();
     const end = "2040-01-01T00:00:00.000Z";
-    database.insert(organization).values({ id: householdId, name: "Managed household", slug: householdId, createdAt: now }).run();
-    database.insert(gateCodes).values([
-      { id: homeCodeId, householdId, label: "Household code", pin: "2468", kind: "home", startsAt: nowIso, controllerEndsAt: end, controllerVisitorId: homeVisitorId, state: "active", createdAt: nowIso, updatedAt: nowIso },
-      { id: ongoingCodeId, householdId, label: "Gardener", pin: "1357", kind: "ongoing", startsAt: nowIso, controllerEndsAt: end, controllerVisitorId: ongoingVisitorId, state: "active", createdAt: nowIso, updatedAt: nowIso },
-    ]).run();
-    database.insert(visitorHouseholds).values([
-      { controllerVisitorId: homeVisitorId, householdId, assignedAt: nowIso },
-      { controllerVisitorId: ongoingVisitorId, householdId, assignedAt: nowIso },
-    ]).run();
+    database
+      .insert(organization)
+      .values({ id: householdId, name: "Managed household", slug: householdId, createdAt: now })
+      .run();
+    database
+      .insert(gateCodes)
+      .values([
+        {
+          id: homeCodeId,
+          householdId,
+          label: "Household code",
+          pin: "2468",
+          kind: "home",
+          startsAt: nowIso,
+          controllerEndsAt: end,
+          controllerVisitorId: homeVisitorId,
+          state: "active",
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        },
+        {
+          id: ongoingCodeId,
+          householdId,
+          label: "Gardener",
+          pin: "1357",
+          kind: "ongoing",
+          startsAt: nowIso,
+          controllerEndsAt: end,
+          controllerVisitorId: ongoingVisitorId,
+          state: "active",
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        },
+      ])
+      .run();
+    database
+      .insert(visitorHouseholds)
+      .values([
+        { controllerVisitorId: homeVisitorId, householdId, assignedAt: nowIso },
+        { controllerVisitorId: ongoingVisitorId, householdId, assignedAt: nowIso },
+      ])
+      .run();
 
     const household = listHouseholds().find((item) => item.id === householdId);
 
@@ -42,9 +75,44 @@ describe("household directory access summaries", () => {
   it("enforces one active household code at the database boundary", () => {
     const now = new Date();
     const nowIso = now.toISOString();
-    database.insert(organization).values({ id: householdId, name: "Managed household", slug: householdId, createdAt: now }).run();
-    database.insert(gateCodes).values({ id: homeCodeId, householdId, label: "Household code", pin: "2468", kind: "home", startsAt: nowIso, controllerEndsAt: "2040-01-01T00:00:00.000Z", controllerVisitorId: homeVisitorId, state: "active", createdAt: nowIso, updatedAt: nowIso }).run();
+    database
+      .insert(organization)
+      .values({ id: householdId, name: "Managed household", slug: householdId, createdAt: now })
+      .run();
+    database
+      .insert(gateCodes)
+      .values({
+        id: homeCodeId,
+        householdId,
+        label: "Household code",
+        pin: "2468",
+        kind: "home",
+        startsAt: nowIso,
+        controllerEndsAt: "2040-01-01T00:00:00.000Z",
+        controllerVisitorId: homeVisitorId,
+        state: "active",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      })
+      .run();
 
-    expect(() => database.insert(gateCodes).values({ id: ongoingCodeId, householdId, label: "Second household code", pin: "1357", kind: "home", startsAt: nowIso, controllerEndsAt: "2040-01-01T00:00:00.000Z", controllerVisitorId: ongoingVisitorId, state: "active", createdAt: nowIso, updatedAt: nowIso }).run()).toThrow();
+    expect(() =>
+      database
+        .insert(gateCodes)
+        .values({
+          id: ongoingCodeId,
+          householdId,
+          label: "Second household code",
+          pin: "1357",
+          kind: "home",
+          startsAt: nowIso,
+          controllerEndsAt: "2040-01-01T00:00:00.000Z",
+          controllerVisitorId: ongoingVisitorId,
+          state: "active",
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        })
+        .run(),
+    ).toThrow();
   });
 });

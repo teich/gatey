@@ -11,7 +11,7 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/vi
 
   try {
     const { id } = await context.params;
-    const body = await request.json() as { householdId?: unknown };
+    const body = (await request.json()) as { householdId?: unknown };
     const householdId = typeof body.householdId === "string" ? body.householdId.trim() : "";
     if (!householdId) return Response.json({ error: "Choose a household." }, { status: 400 });
     const household = listHouseholds().find((item) => item.id === householdId);
@@ -22,6 +22,9 @@ export async function PUT(request: Request, context: RouteContext<"/api/admin/vi
     assignVisitorToHousehold(id, householdId);
     return Response.json({ household: { id: household.id, name: household.name } });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not assign this visitor." }, { status: 400 });
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Could not assign this visitor." },
+      { status: 400 },
+    );
   }
 }

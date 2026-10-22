@@ -79,24 +79,34 @@ describe("admin household gate-code routes", () => {
       persisted: persist(code.controllerVisitorId),
     }));
 
-    const response = await POST(new Request("https://gatey.test/api/admin/households/home-a/gate-code", {
-      method: "POST",
-      body: JSON.stringify({ pin: code.pin }),
-    }), context());
+    const response = await POST(
+      new Request("https://gatey.test/api/admin/households/home-a/gate-code", {
+        method: "POST",
+        body: JSON.stringify({ pin: code.pin }),
+      }),
+      context(),
+    );
 
     expect(response.status).toBe(201);
-    expect(dependencies.saveGateCode).toHaveBeenCalledWith(expect.objectContaining({ householdId: "home-a", kind: "home", pin: "2468" }));
-    expect(dependencies.recordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({ actorUserId: "admin-a", householdId: "home-a", action: "gate-code.created" }));
+    expect(dependencies.saveGateCode).toHaveBeenCalledWith(
+      expect.objectContaining({ householdId: "home-a", kind: "home", pin: "2468" }),
+    );
+    expect(dependencies.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ actorUserId: "admin-a", householdId: "home-a", action: "gate-code.created" }),
+    );
     expect(dependencies.recordAuditEvent.mock.calls[0][0].details).not.toHaveProperty("pin");
   });
 
   it("looks up the household from the route instead of the admin's active household", async () => {
     dependencies.getHousehold.mockReturnValue(null);
 
-    const response = await POST(new Request("https://gatey.test/api/admin/households/missing/gate-code", {
-      method: "POST",
-      body: JSON.stringify({ pin: "2468" }),
-    }), context("missing"));
+    const response = await POST(
+      new Request("https://gatey.test/api/admin/households/missing/gate-code", {
+        method: "POST",
+        body: JSON.stringify({ pin: "2468" }),
+      }),
+      context("missing"),
+    );
 
     expect(response.status).toBe(404);
     expect(dependencies.getHousehold).toHaveBeenCalledWith("missing");
@@ -106,10 +116,13 @@ describe("admin household gate-code routes", () => {
   it("rejects an invalid manual PIN before provisioning", async () => {
     dependencies.findHomeCode.mockReturnValue(undefined);
 
-    const response = await POST(new Request("https://gatey.test/api/admin/households/home-a/gate-code", {
-      method: "POST",
-      body: JSON.stringify({ pin: "12" }),
-    }), context());
+    const response = await POST(
+      new Request("https://gatey.test/api/admin/households/home-a/gate-code", {
+        method: "POST",
+        body: JSON.stringify({ pin: "12" }),
+      }),
+      context(),
+    );
 
     expect(response.status).toBe(400);
     expect(dependencies.provisionAndPersistGateCode).not.toHaveBeenCalled();
@@ -117,12 +130,17 @@ describe("admin household gate-code routes", () => {
 
   it("restores the controller PIN when local replacement persistence fails", async () => {
     dependencies.findHomeCode.mockReturnValue(code);
-    dependencies.updateGateCode.mockImplementation(() => { throw new Error("database unavailable"); });
+    dependencies.updateGateCode.mockImplementation(() => {
+      throw new Error("database unavailable");
+    });
 
-    const response = await PATCH(new Request("https://gatey.test/api/admin/households/home-a/gate-code", {
-      method: "PATCH",
-      body: JSON.stringify({ pin: "1357" }),
-    }), context());
+    const response = await PATCH(
+      new Request("https://gatey.test/api/admin/households/home-a/gate-code", {
+        method: "PATCH",
+        body: JSON.stringify({ pin: "1357" }),
+      }),
+      context(),
+    );
 
     expect(response.status).toBe(424);
     expect(dependencies.replaceVisitorPin).toHaveBeenNthCalledWith(1, "visitor-a", "1357");
@@ -132,7 +150,10 @@ describe("admin household gate-code routes", () => {
   it("revokes and disables the household code", async () => {
     dependencies.findHomeCode.mockReturnValue(code);
 
-    const response = await DELETE(new Request("https://gatey.test/api/admin/households/home-a/gate-code", { method: "DELETE" }), context());
+    const response = await DELETE(
+      new Request("https://gatey.test/api/admin/households/home-a/gate-code", { method: "DELETE" }),
+      context(),
+    );
 
     expect(response.status).toBe(200);
     expect(dependencies.revokeCredential).toHaveBeenCalledWith("visitor-a");

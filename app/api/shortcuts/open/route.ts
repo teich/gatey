@@ -7,16 +7,38 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const token = /^Bearer ([A-Za-z0-9_-]{43})$/i.exec(request.headers.get("authorization") || "")?.[1] || "";
   const claim = claimShortcutOpen(token);
-  if (claim.state === "unauthorized") return Response.json({ message: "Gatey access is disconnected. Create a new key in Gatey and paste it into your shortcut." }, { status: 401, headers: shortcutHeaders });
-  if (claim.state === "cooldown") return Response.json({ message: "An opening was requested recently. Wait 30 seconds before trying again." }, { status: 429, headers: { ...shortcutHeaders, "Retry-After": "30" } });
-  const audit = { actorUserId: claim.userId, actorName: claim.actorName, householdId: claim.householdId, householdName: claim.householdName, action: "gate.open", details: { source: "shortcut" } };
+  if (claim.state === "unauthorized")
+    return Response.json(
+      { message: "Gatey access is disconnected. Create a new key in Gatey and paste it into your shortcut." },
+      { status: 401, headers: shortcutHeaders },
+    );
+  if (claim.state === "cooldown")
+    return Response.json(
+      { message: "An opening was requested recently. Wait 30 seconds before trying again." },
+      { status: 429, headers: { ...shortcutHeaders, "Retry-After": "30" } },
+    );
+  const audit = {
+    actorUserId: claim.userId,
+    actorName: claim.actorName,
+    householdId: claim.householdId,
+    householdName: claim.householdName,
+    action: "gate.open",
+    details: { source: "shortcut" },
+  };
   try {
     await unlockGate({ id: claim.userId, name: claim.actorName });
   } catch {
     recordAuditEvent({ ...audit, outcome: "failed" });
-    return Response.json({ message: "Gate opening could not be confirmed. Check the gate in Gatey before trying again." }, { status: 503, headers: shortcutHeaders });
+    return Response.json(
+      { message: "Gate opening could not be confirmed. Check the gate in Gatey before trying again." },
+      { status: 503, headers: shortcutHeaders },
+    );
   }
-  try { markShortcutUsed(claim.connectionId); } catch { /* The controller already accepted the request. */ }
+  try {
+    markShortcutUsed(claim.connectionId);
+  } catch {
+    /* The controller already accepted the request. */
+  }
   recordAuditEvent({ ...audit, outcome: "succeeded" });
   return Response.json({ ok: true, message: "Gate opening requested." }, { headers: shortcutHeaders });
 }

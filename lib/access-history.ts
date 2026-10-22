@@ -73,16 +73,20 @@ export function getAccessSyncStatus(): AccessSyncStatus {
 
 function saveSyncState(values: Partial<typeof unifiAccessSyncState.$inferInsert>) {
   const now = new Date().toISOString();
-  database.insert(unifiAccessSyncState).values({
-    id: SYNC_STATE_ID,
-    state: "idle",
-    lastError: "",
-    updatedAt: now,
-    ...values,
-  }).onConflictDoUpdate({
-    target: unifiAccessSyncState.id,
-    set: { ...values, updatedAt: now },
-  }).run();
+  database
+    .insert(unifiAccessSyncState)
+    .values({
+      id: SYNC_STATE_ID,
+      state: "idle",
+      lastError: "",
+      updatedAt: now,
+      ...values,
+    })
+    .onConflictDoUpdate({
+      target: unifiAccessSyncState.id,
+      set: { ...values, updatedAt: now },
+    })
+    .run();
 }
 
 function configuredHistoryStart(): Date {
@@ -105,9 +109,10 @@ async function runAccessSync() {
   const startedAt = new Date();
   const previous = currentSyncState();
   const previousComplete = previous?.completeThrough ? new Date(previous.completeThrough) : undefined;
-  const since = previousComplete && !Number.isNaN(previousComplete.valueOf())
-    ? new Date(previousComplete.getTime() - OVERLAP_SECONDS * 1_000)
-    : configuredHistoryStart();
+  const since =
+    previousComplete && !Number.isNaN(previousComplete.valueOf())
+      ? new Date(previousComplete.getTime() - OVERLAP_SECONDS * 1_000)
+      : configuredHistoryStart();
   const until = startedAt;
   saveSyncState({ state: "running", lastStartedAt: startedAt.toISOString(), lastError: "" });
 
@@ -136,39 +141,48 @@ async function runAccessSync() {
         if (!id || !occurredAt || !door || event?.type !== "access.door.unlock") return [];
         if (!earliest || occurredAt < earliest) earliest = occurredAt;
         const activityResource = source?.target?.find((target) => target.type === "activities_resource");
-        return [{
-          id,
-          occurredAt,
-          actorControllerId: source?.actor?.id || null,
-          actorType: source?.actor?.type || "",
-          actorDisplayName: source?.actor?.display_name || source?.actor?.alternate_name || "",
-          credentialProvider: source?.authentication?.credential_provider || "",
-          eventType: event.type,
-          result: event.result || "",
-          displayMessage: event.display_message || "",
-          reason: event.reason || "",
-          doorId: door.id || gate.id,
-          doorName: door.display_name || gate.name,
-          activityResourceId: activityResource?.id || null,
-          receivedAt,
-        }];
+        return [
+          {
+            id,
+            occurredAt,
+            actorControllerId: source?.actor?.id || null,
+            actorType: source?.actor?.type || "",
+            actorDisplayName: source?.actor?.display_name || source?.actor?.alternate_name || "",
+            credentialProvider: source?.authentication?.credential_provider || "",
+            eventType: event.type,
+            result: event.result || "",
+            displayMessage: event.display_message || "",
+            reason: event.reason || "",
+            doorId: door.id || gate.id,
+            doorName: door.display_name || gate.name,
+            activityResourceId: activityResource?.id || null,
+            receivedAt,
+          },
+        ];
       });
 
-      database.transaction((tx) => {
-        for (const row of rows) {
-          const { id, ...values } = row;
-          tx.insert(unifiAccessEvents).values({ id, ...values }).onConflictDoUpdate({
-            target: unifiAccessEvents.id,
-            set: values,
-          }).run();
-        }
-      }, { behavior: "immediate" });
+      database.transaction(
+        (tx) => {
+          for (const row of rows) {
+            const { id, ...values } = row;
+            tx.insert(unifiAccessEvents)
+              .values({ id, ...values })
+              .onConflictDoUpdate({
+                target: unifiAccessEvents.id,
+                set: values,
+              })
+              .run();
+          }
+        },
+        { behavior: "immediate" },
+      );
       imported += rows.length;
       pageNum += 1;
     } while ((pageNum - 1) * PAGE_SIZE < total);
 
     const coverageStartsAt = [previous?.coverageStartsAt, earliest]
-      .filter((value): value is string => Boolean(value)).sort()[0];
+      .filter((value): value is string => Boolean(value))
+      .sort()[0];
     saveSyncState({
       state: "succeeded",
       ...(coverageStartsAt ? { coverageStartsAt } : {}),
@@ -228,7 +242,9 @@ export function listActorUsageSummaries(actorIds: string[], windowDays = USAGE_W
   if (!uniqueIds.length) return new Map<string, AccessUsageSummary>();
   const placeholders = uniqueIds.map(() => "?").join(",");
   const since = new Date(Date.now() - windowDays * 86_400_000).toISOString();
-  const rows = sqlite.prepare(`
+  const rows = sqlite
+    .prepare(
+      `
     select coalesce(current_link.controller_actor_id, events.actor_controller_id) as key,
       events.occurred_at
     from unifi_access_events events
@@ -244,16 +260,24 @@ export function listActorUsageSummaries(actorIds: string[], windowDays = USAGE_W
       and events.credential_provider = 'PIN_CODE'
       and events.occurred_at >= ?
     order by events.occurred_at desc
-  `).all(...uniqueIds, since) as unknown as UsageRow[];
+  `,
+    )
+    .all(...uniqueIds, since) as unknown as UsageRow[];
   return summarizeUsage(rows, uniqueIds, windowDays);
 }
 
 export function listGateCodeUsageSummaries(householdId: string, windowDays = USAGE_WINDOW_DAYS) {
-  const codeIds = database.select({ id: gateCodes.id }).from(gateCodes)
-    .where(eq(gateCodes.householdId, householdId)).all().map((row) => row.id);
+  const codeIds = database
+    .select({ id: gateCodes.id })
+    .from(gateCodes)
+    .where(eq(gateCodes.householdId, householdId))
+    .all()
+    .map((row) => row.id);
   if (!codeIds.length) return new Map<string, AccessUsageSummary>();
   const since = new Date(Date.now() - windowDays * 86_400_000).toISOString();
-  const rows = sqlite.prepare(`
+  const rows = sqlite
+    .prepare(
+      `
     select links.subject_id as key, events.occurred_at
     from unifi_actor_links links
     join unifi_access_events events on events.actor_controller_id = links.controller_actor_id
@@ -264,41 +288,56 @@ export function listGateCodeUsageSummaries(householdId: string, windowDays = USA
       and events.credential_provider = 'PIN_CODE'
       and events.occurred_at >= ?
     order by events.occurred_at desc
-  `).all(householdId, since) as unknown as UsageRow[];
+  `,
+    )
+    .all(householdId, since) as unknown as UsageRow[];
   return summarizeUsage(rows, codeIds, windowDays);
 }
 
 export function seedExistingActorLinks() {
   const now = new Date().toISOString();
-  const currentCodes = database.select().from(gateCodes).all().map((code) => ({
-    controllerActorId: code.controllerVisitorId,
-    actorType: "visitor",
-    subjectType: "gate_code" as const,
-    subjectId: code.id,
-    householdId: code.householdId,
-    label: code.label,
-    role: "current" as const,
-    linkedAt: now,
-  }));
-  const legacyCredentials = database.select().from(credentials).all().map((credential) => ({
-    controllerActorId: credential.controllerVisitorId,
-    actorType: "visitor",
-    subjectType: "credential" as const,
-    subjectId: credential.id,
-    householdId: credential.householdId,
-    label: credential.label,
-    role: "current" as const,
-    linkedAt: now,
-  }));
-  database.transaction((tx) => {
-    for (const values of [...currentCodes, ...legacyCredentials]) {
-      tx.insert(unifiActorLinks).values(values).onConflictDoNothing().run();
-    }
-  }, { behavior: "immediate" });
+  const currentCodes = database
+    .select()
+    .from(gateCodes)
+    .all()
+    .map((code) => ({
+      controllerActorId: code.controllerVisitorId,
+      actorType: "visitor",
+      subjectType: "gate_code" as const,
+      subjectId: code.id,
+      householdId: code.householdId,
+      label: code.label,
+      role: "current" as const,
+      linkedAt: now,
+    }));
+  const legacyCredentials = database
+    .select()
+    .from(credentials)
+    .all()
+    .map((credential) => ({
+      controllerActorId: credential.controllerVisitorId,
+      actorType: "visitor",
+      subjectType: "credential" as const,
+      subjectId: credential.id,
+      householdId: credential.householdId,
+      label: credential.label,
+      role: "current" as const,
+      linkedAt: now,
+    }));
+  database.transaction(
+    (tx) => {
+      for (const values of [...currentCodes, ...legacyCredentials]) {
+        tx.insert(unifiActorLinks).values(values).onConflictDoNothing().run();
+      }
+    },
+    { behavior: "immediate" },
+  );
 }
 
 export function listAccessActivity(limit = 250): AccessActivityItem[] {
-  const rows = sqlite.prepare(`
+  const rows = sqlite
+    .prepare(
+      `
     select events.id, events.occurred_at, events.actor_controller_id, events.actor_display_name, events.actor_type,
       events.credential_provider, events.result, events.display_message, events.reason,
       events.door_name, links.subject_type, links.label as subject_label,
@@ -325,7 +364,9 @@ export function listAccessActivity(limit = 250): AccessActivityItem[] {
     group by events.id
     order by events.occurred_at desc
     limit ?
-  `).all(Math.max(1, Math.min(limit, 500))) as unknown as Array<Record<string, string | null>>;
+  `,
+    )
+    .all(Math.max(1, Math.min(limit, 500))) as unknown as Array<Record<string, string | null>>;
   return rows.map((row) => {
     const actorKind: AccessActivityItem["actorKind"] = row.service_account_label
       ? "service_account"
@@ -358,13 +399,17 @@ export function listAccessActivity(limit = 250): AccessActivityItem[] {
 
 export function accessActivityTotals(windowDays = 30) {
   const since = new Date(Date.now() - windowDays * 86_400_000).toISOString();
-  const row = sqlite.prepare(`
+  const row = sqlite
+    .prepare(
+      `
     select count(*) as total,
       sum(case when result = 'ACCESS' then 1 else 0 end) as granted,
       sum(case when result = 'BLOCKED' then 1 else 0 end) as blocked,
       sum(case when result = 'ACCESS' and credential_provider = 'PIN_CODE' then 1 else 0 end) as pin_uses
     from unifi_access_events where occurred_at >= ?
-  `).get(since) as unknown as Record<string, number | null>;
+  `,
+    )
+    .get(since) as unknown as Record<string, number | null>;
   return {
     windowDays,
     total: Number(row?.total || 0),

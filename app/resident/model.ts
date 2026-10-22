@@ -1,10 +1,4 @@
-import {
-  formatGateyDateTime,
-  gateyDateKey,
-  gateyEndOfDay,
-  gateyYear,
-  shiftGateyDateKey,
-} from "@/lib/date-time";
+import { formatGateyDateTime, gateyDateKey, gateyEndOfDay, gateyYear, shiftGateyDateKey } from "@/lib/date-time";
 
 export type Duration = "today" | "week" | "custom";
 export type CodeState = "active" | "upcoming" | "expired" | "revoked";
@@ -112,7 +106,8 @@ export function codeLastUsed(code: Pick<GuestCode, "lastUsedAt" | "lastUseKnown"
   if (!code.lastUsedAt) return "Not used yet";
   const today = new Date();
   if (gateyDateKey(code.lastUsedAt) === gateyDateKey(today)) return `Used today at ${formatTime(code.lastUsedAt)}`;
-  if (gateyDateKey(code.lastUsedAt) === shiftGateyDateKey(today, -1)) return `Used yesterday at ${formatTime(code.lastUsedAt)}`;
+  if (gateyDateKey(code.lastUsedAt) === shiftGateyDateKey(today, -1))
+    return `Used yesterday at ${formatTime(code.lastUsedAt)}`;
   return `Used ${formatDateTime(code.lastUsedAt, gateyYear(code.lastUsedAt) !== gateyYear(today))}`;
 }
 

@@ -1,7 +1,13 @@
 import { authorizeAdminRequest } from "@/lib/api-authorization";
 import { recordAuditEvent } from "@/lib/audit-log";
 import { findHomeCode } from "@/lib/gate-codes";
-import { changeGateCode, createGateCode, gateCodeErrorResponse, parseGateCodePin, retireGateCode } from "@/lib/gate-code-service";
+import {
+  changeGateCode,
+  createGateCode,
+  gateCodeErrorResponse,
+  parseGateCodePin,
+  retireGateCode,
+} from "@/lib/gate-code-service";
 import { getHousehold } from "@/lib/households";
 import { generateGateCodePin } from "@/lib/unifi-access";
 
@@ -23,7 +29,8 @@ function audit(context: AdminContext, household: Household, action: string, outc
 }
 
 // Administrators need the controller's own error to fix a failed change.
-const errorResponse = (error: unknown, fallback: string) => gateCodeErrorResponse(error, fallback, { showControllerErrors: true });
+const errorResponse = (error: unknown, fallback: string) =>
+  gateCodeErrorResponse(error, fallback, { showControllerErrors: true });
 
 export async function POST(request: Request, context: RouteContext<"/api/admin/households/[id]/gate-code">) {
   const authorization = await authorizeAdminRequest(request);
@@ -31,10 +38,11 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/h
   const { id: householdId } = await context.params;
   const household = getHousehold(householdId);
   if (!household) return Response.json({ error: "Household not found." }, { status: 404 });
-  if (findHomeCode(householdId)) return Response.json({ error: "This household already has a gate code." }, { status: 409 });
+  if (findHomeCode(householdId))
+    return Response.json({ error: "This household already has a gate code." }, { status: 409 });
 
   try {
-    const body = await request.json() as { pin?: unknown };
+    const body = (await request.json()) as { pin?: unknown };
     const code = await createGateCode({
       householdId,
       householdName: household.name,
@@ -61,8 +69,8 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
   if (!code) return Response.json({ error: "This household does not have a gate code." }, { status: 404 });
 
   try {
-    const body = await request.json() as { pin?: unknown };
-    const pin = parseGateCodePin(body.pin) || await generateGateCodePin();
+    const body = (await request.json()) as { pin?: unknown };
+    const pin = parseGateCodePin(body.pin) || (await generateGateCodePin());
     const updated = await changeGateCode({ householdId, code, label: `${household.name} gate code`, pin });
     audit(authorization.context, household, "gate-code.updated", "succeeded");
     return Response.json({ code: updated });

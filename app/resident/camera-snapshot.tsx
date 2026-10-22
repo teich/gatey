@@ -18,15 +18,44 @@ export function CameraSnapshot({
 }) {
   if (!configured) return null;
 
-  return <CameraSnapshotImage key={`${camera}-${revision}`} camera={camera} label={label} revision={revision} onSettled={onSettled} />;
+  return (
+    <CameraSnapshotImage
+      key={`${camera}-${revision}`}
+      camera={camera}
+      label={label}
+      revision={revision}
+      onSettled={onSettled}
+    />
+  );
 }
 
-function CameraSnapshotImage({ camera, label, revision, onSettled }: { camera: CameraView; label: string; revision: number; onSettled: (camera: CameraView, revision: number, loaded: boolean) => void }) {
+function CameraSnapshotImage({
+  camera,
+  label,
+  revision,
+  onSettled,
+}: {
+  camera: CameraView;
+  label: string;
+  revision: number;
+  onSettled: (camera: CameraView, revision: number, loaded: boolean) => void;
+}) {
   const [available, setAvailable] = useState(true);
 
   if (!available) return <em className="resident-camera-unavailable">Camera unavailable</em>;
 
   // This same-origin image request carries the resident's session cookie; Next's image optimizer cannot.
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img className="resident-camera-image" src={`/api/cameras/${camera}/snapshot?refresh=${revision}`} alt={`Latest ${label.toLowerCase()} camera snapshot`} onLoad={() => onSettled(camera, revision, true)} onError={() => { setAvailable(false); onSettled(camera, revision, false); }} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      className="resident-camera-image"
+      src={`/api/cameras/${camera}/snapshot?refresh=${revision}`}
+      alt={`Latest ${label.toLowerCase()} camera snapshot`}
+      onLoad={() => onSettled(camera, revision, true)}
+      onError={() => {
+        setAvailable(false);
+        onSettled(camera, revision, false);
+      }}
+    />
+  );
 }

@@ -22,7 +22,12 @@ function callerIdVerification(form: URLSearchParams) {
 }
 
 function escapeXml(value: string) {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 }
 
 function voice() {
@@ -38,7 +43,14 @@ function twimlGather(message: string) {
 }
 
 function xml(body: string, status = 200) {
-  return new Response(body, { status, headers: { "Content-Type": "text/xml; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
+  return new Response(body, {
+    status,
+    headers: {
+      "Content-Type": "text/xml; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }
 
 function publicRequestUrl(pathname: string) {
@@ -61,15 +73,21 @@ async function readSignedForm(request: Request, pathname: string): Promise<URLSe
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!authToken) return new Response("unavailable", { status: 503 });
   const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
-  if (contentType !== "application/x-www-form-urlencoded") return new Response("unsupported media type", { status: 415 });
+  if (contentType !== "application/x-www-form-urlencoded")
+    return new Response("unsupported media type", { status: 415 });
   const declaredLength = Number(request.headers.get("content-length") || "0");
-  if (!Number.isFinite(declaredLength) || declaredLength < 0) return new Response("invalid content length", { status: 400 });
+  if (!Number.isFinite(declaredLength) || declaredLength < 0)
+    return new Response("invalid content length", { status: 400 });
   if (declaredLength > MAX_BODY_BYTES) return new Response("request too large", { status: 413 });
   const body = await request.text();
   if (Buffer.byteLength(body) > MAX_BODY_BYTES) return new Response("request too large", { status: 413 });
   const params = new URLSearchParams(body);
   let url: string;
-  try { url = publicRequestUrl(pathname); } catch { return new Response("unavailable", { status: 503 }); }
+  try {
+    url = publicRequestUrl(pathname);
+  } catch {
+    return new Response("unavailable", { status: 503 });
+  }
   if (!validSignature(request.headers.get("x-twilio-signature") || "", url, params, authToken)) {
     recordTwilioEvent({ event: "signature_invalid", detail: pathname });
     return new Response("forbidden", { status: 403 });
@@ -85,10 +103,14 @@ function callerPrompt(caller: AuthorizedPhoneCaller) {
 }
 
 function actionMessage(action: TwilioAction, status: string) {
-  if (status === "succeeded") return action === "open" ? "The gate is now open." : `The gate will remain open for ${HOLD_OPEN_MINUTES} minutes.`;
+  if (status === "succeeded")
+    return action === "open" ? "The gate is now open." : `The gate will remain open for ${HOLD_OPEN_MINUTES} minutes.`;
   if (status === "pending") return "This gate request is already being processed.";
-  if (status === "unknown") return "The previous gate request has an unknown result. Please check the gate before trying again.";
-  return action === "open" ? "Unable to open the gate right now. Please try again." : "Unable to hold the gate open right now. Please try again.";
+  if (status === "unknown")
+    return "The previous gate request has an unknown result. Please check the gate before trying again.";
+  return action === "open"
+    ? "Unable to open the gate right now. Please try again."
+    : "Unable to hold the gate open right now. Please try again.";
 }
 
 export async function handleTwilioVoice(request: Request) {
@@ -102,8 +124,14 @@ export async function handleTwilioVoice(request: Request) {
     recordTwilioEvent({ event: "caller_blocked", detail: `Caller ID: ${verification}`, callerE164: from, callSid });
     return xml(twimlSay("This incoming number is not authorized for this gate."));
   }
-  const callerEvent = { callerE164: caller.phoneE164, callSid, actorUserId: caller.userId, householdId: caller.householdId };
-  if (verification !== VERIFIED_CALLER_ID) recordTwilioEvent({ ...callerEvent, event: "caller_unverified", detail: verification });
+  const callerEvent = {
+    callerE164: caller.phoneE164,
+    callSid,
+    actorUserId: caller.userId,
+    householdId: caller.householdId,
+  };
+  if (verification !== VERIFIED_CALLER_ID)
+    recordTwilioEvent({ ...callerEvent, event: "caller_unverified", detail: verification });
   recordTwilioEvent({ ...callerEvent, event: "caller_prompted", detail: `Caller ID: ${verification}` });
   return xml(twimlGather(callerPrompt(caller)));
 }
@@ -125,17 +153,39 @@ export async function handleTwilioVoiceConfirmation(request: Request) {
   const callerId = form.get("StirVerstat")?.trim();
   const action: TwilioAction | undefined = digit === "1" ? "open" : digit === "2" ? "hold_open" : undefined;
   if (!action) {
-    recordTwilioEvent({ event: "invalid_digit", detail: digit || "empty", callerE164: caller.phoneE164, callSid, actorUserId: caller.userId, householdId: caller.householdId });
+    recordTwilioEvent({
+      event: "invalid_digit",
+      detail: digit || "empty",
+      callerE164: caller.phoneE164,
+      callSid,
+      actorUserId: caller.userId,
+      householdId: caller.householdId,
+    });
     return xml(twimlSay("Invalid selection. Goodbye."));
   }
   if ((action === "open" && !caller.canOpen) || (action === "hold_open" && !caller.canHoldOpen)) {
-    recordTwilioEvent({ event: "action_unauthorized", detail: action, callerE164: caller.phoneE164, callSid, actorUserId: caller.userId, householdId: caller.householdId });
+    recordTwilioEvent({
+      event: "action_unauthorized",
+      detail: action,
+      callerE164: caller.phoneE164,
+      callSid,
+      actorUserId: caller.userId,
+      householdId: caller.householdId,
+    });
     return xml(twimlSay("This number is not authorized for that action."));
   }
 
   let reservation;
   try {
-    reservation = beginTwilioAction({ callSid, action, callerE164: caller.phoneE164, actorUserId: caller.userId, actorName: caller.userName, householdId: caller.householdId, householdName: caller.householdName });
+    reservation = beginTwilioAction({
+      callSid,
+      action,
+      callerE164: caller.phoneE164,
+      actorUserId: caller.userId,
+      actorName: caller.userName,
+      householdId: caller.householdId,
+      householdName: caller.householdName,
+    });
   } catch (error) {
     return xml(twimlSay(error instanceof Error ? actionMessage(action, "failed") : "Unable to process this request."));
   }
@@ -145,22 +195,69 @@ export async function handleTwilioVoiceConfirmation(request: Request) {
     let detail = "";
     let successMessage = actionMessage(action, "succeeded");
     if (action === "open") {
-      const status = await unlockGate({ id: caller.userId, name: caller.userName, source: "twilio-voice", extra: { from: caller.phoneE164, call_sid: callSid, digit, ...(callerId ? { stir_verstat: callerId } : {}) } });
+      const status = await unlockGate({
+        id: caller.userId,
+        name: caller.userName,
+        source: "twilio-voice",
+        extra: { from: caller.phoneE164, call_sid: callSid, digit, ...(callerId ? { stir_verstat: callerId } : {}) },
+      });
       detail = status.state;
     } else {
-      const result = await startPhoneHold({ endsAt: new Date(Date.now() + HOLD_OPEN_MINUTES * 60_000), householdId: caller.householdId, householdName: caller.householdName, actorUserId: caller.userId, actorName: caller.userName });
+      const result = await startPhoneHold({
+        endsAt: new Date(Date.now() + HOLD_OPEN_MINUTES * 60_000),
+        householdId: caller.householdId,
+        householdName: caller.householdName,
+        actorUserId: caller.userId,
+        actorName: caller.userName,
+      });
       detail = result.alreadyActive ? "already active" : result.party.endsAt;
       if (result.alreadyActive) successMessage = "The gate is already held open.";
     }
     finishTwilioAction(callSid, action, "succeeded", detail);
-    recordTwilioEvent({ event: action === "open" ? "unlock_success" : "hold_open", detail, callerE164: caller.phoneE164, callSid, actorUserId: caller.userId, householdId: caller.householdId });
-    recordAuditEvent({ actorUserId: caller.userId, actorName: caller.userName, householdId: caller.householdId, householdName: caller.householdName, action: action === "open" ? "gate.open" : "party.enabled", outcome: "succeeded", details: { source: "twilio", callSid, phone: caller.phoneE164, result: detail, ...(callerId ? { callerId } : {}) } });
+    recordTwilioEvent({
+      event: action === "open" ? "unlock_success" : "hold_open",
+      detail,
+      callerE164: caller.phoneE164,
+      callSid,
+      actorUserId: caller.userId,
+      householdId: caller.householdId,
+    });
+    recordAuditEvent({
+      actorUserId: caller.userId,
+      actorName: caller.userName,
+      householdId: caller.householdId,
+      householdName: caller.householdName,
+      action: action === "open" ? "gate.open" : "party.enabled",
+      outcome: "succeeded",
+      details: {
+        source: "twilio",
+        callSid,
+        phone: caller.phoneE164,
+        result: detail,
+        ...(callerId ? { callerId } : {}),
+      },
+    });
     return xml(twimlSay(successMessage));
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Gate action failed.";
     finishTwilioAction(callSid, action, "failed", detail);
-    recordTwilioEvent({ event: action === "open" ? "unlock_failed" : "action_failed", detail, callerE164: caller.phoneE164, callSid, actorUserId: caller.userId, householdId: caller.householdId });
-    recordAuditEvent({ actorUserId: caller.userId, actorName: caller.userName, householdId: caller.householdId, householdName: caller.householdName, action: action === "open" ? "gate.open" : "party.enabled", outcome: "failed", details: { source: "twilio", callSid, phone: caller.phoneE164, ...(callerId ? { callerId } : {}) } });
+    recordTwilioEvent({
+      event: action === "open" ? "unlock_failed" : "action_failed",
+      detail,
+      callerE164: caller.phoneE164,
+      callSid,
+      actorUserId: caller.userId,
+      householdId: caller.householdId,
+    });
+    recordAuditEvent({
+      actorUserId: caller.userId,
+      actorName: caller.userName,
+      householdId: caller.householdId,
+      householdName: caller.householdName,
+      action: action === "open" ? "gate.open" : "party.enabled",
+      outcome: "failed",
+      details: { source: "twilio", callSid, phone: caller.phoneE164, ...(callerId ? { callerId } : {}) },
+    });
     return xml(twimlSay(actionMessage(action, "failed")));
   }
 }

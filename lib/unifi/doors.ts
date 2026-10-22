@@ -107,12 +107,21 @@ export async function getGateStatus(options: { fresh?: boolean } = {}): Promise<
   return statusRequest;
 }
 
-export async function unlockGate(actor: { id: string; name: string; source?: "gatey" | "twilio-voice"; extra?: Record<string, string> }): Promise<GateStatus> {
-  const personLink = database.select({ controllerUserId: unifiPersonLinks.controllerUserId })
-    .from(unifiPersonLinks).where(eq(unifiPersonLinks.userId, actor.id)).get();
+export async function unlockGate(actor: {
+  id: string;
+  name: string;
+  source?: "gatey" | "twilio-voice";
+  extra?: Record<string, string>;
+}): Promise<GateStatus> {
+  const personLink = database
+    .select({ controllerUserId: unifiPersonLinks.controllerUserId })
+    .from(unifiPersonLinks)
+    .where(eq(unifiPersonLinks.userId, actor.id))
+    .get();
 
   await withGateDoor(async (door) => {
-    if (door.is_bind_hub === false) throw new Error("UniFi cannot remotely open this gate because it is not connected to a hub.");
+    if (door.is_bind_hub === false)
+      throw new Error("UniFi cannot remotely open this gate because it is not connected to a hub.");
     await request<"success">(`/doors/${encodeURIComponent(door.id)}/unlock?control_cmd=open`, {
       method: "PUT",
       ...jsonBody({
@@ -132,18 +141,22 @@ export async function holdGateOpenUntil(endsAt: Date) {
   const minutes = Math.ceil((endsAt.getTime() - Date.now()) / 60_000);
   if (minutes < 1) throw new Error("Choose a party end time at least one minute from now.");
 
-  await withGateDoor((door) => request<"success">(`/doors/${encodeURIComponent(door.id)}/lock_rule`, {
-    method: "PUT",
-    ...jsonBody({ type: "custom", interval: minutes }),
-  }));
+  await withGateDoor((door) =>
+    request<"success">(`/doors/${encodeURIComponent(door.id)}/lock_rule`, {
+      method: "PUT",
+      ...jsonBody({ type: "custom", interval: minutes }),
+    }),
+  );
   delete globalForDoors.gateyGateStatus;
 }
 
 export async function endGateHoldOpen() {
   assertControllerChangesAllowed();
-  await withGateDoor((door) => request<"success">(`/doors/${encodeURIComponent(door.id)}/lock_rule`, {
-    method: "PUT",
-    ...jsonBody({ type: "lock_now" }),
-  }));
+  await withGateDoor((door) =>
+    request<"success">(`/doors/${encodeURIComponent(door.id)}/lock_rule`, {
+      method: "PUT",
+      ...jsonBody({ type: "lock_now" }),
+    }),
+  );
   delete globalForDoors.gateyGateStatus;
 }

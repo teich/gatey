@@ -14,7 +14,7 @@ export function SyncAccessButton() {
     setError("");
     try {
       const response = await fetch("/api/admin/access/sync", { method: "POST" });
-      const body = await response.json() as { error?: string };
+      const body = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(body.error || "Access history could not be synchronized.");
       router.refresh();
     } catch (caught) {
@@ -24,5 +24,12 @@ export function SyncAccessButton() {
     }
   }
 
-  return <div className="flex flex-col items-end gap-2"><Button size="lg" type="button" disabled={working} onClick={() => void sync()}>{working ? "Syncing…" : "Sync now"}</Button>{error ? <span className="max-w-sm text-right text-xs text-destructive">{error}</span> : null}</div>;
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <Button size="lg" type="button" disabled={working} onClick={() => void sync()}>
+        {working ? "Syncing…" : "Sync now"}
+      </Button>
+      {error ? <span className="max-w-sm text-right text-xs text-destructive">{error}</span> : null}
+    </div>
+  );
 }

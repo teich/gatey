@@ -13,8 +13,11 @@ export type UnifiServiceAccount = {
 };
 
 export function listUnifiServiceAccounts(): Map<string, UnifiServiceAccount> {
-  const rows = database.select().from(unifiServiceAccounts)
-    .orderBy(asc(sql`${unifiServiceAccounts.label} collate nocase`)).all();
+  const rows = database
+    .select()
+    .from(unifiServiceAccounts)
+    .orderBy(asc(sql`${unifiServiceAccounts.label} collate nocase`))
+    .all();
   return new Map(rows.map((row) => [row.controllerUserId, row]));
 }
 
@@ -31,12 +34,19 @@ export function markUnifiServiceAccount(input: {
     markedByUserId: input.actorUserId,
     markedByName: input.actorName.slice(0, 160),
   };
-  database.insert(unifiServiceAccounts).values(values).onConflictDoUpdate({
-    target: unifiServiceAccounts.controllerUserId,
-    set: values,
-  }).run();
+  database
+    .insert(unifiServiceAccounts)
+    .values(values)
+    .onConflictDoUpdate({
+      target: unifiServiceAccounts.controllerUserId,
+      set: values,
+    })
+    .run();
 }
 
 export function restoreUnifiServiceAccount(controllerUserId: string): boolean {
-  return Boolean(database.delete(unifiServiceAccounts).where(eq(unifiServiceAccounts.controllerUserId, controllerUserId)).run().changes);
+  return Boolean(
+    database.delete(unifiServiceAccounts).where(eq(unifiServiceAccounts.controllerUserId, controllerUserId)).run()
+      .changes,
+  );
 }

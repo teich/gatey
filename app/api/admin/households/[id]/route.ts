@@ -23,7 +23,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
   if (!getHousehold(id)) return Response.json({ error: "Household not found." }, { status: 404 });
 
   try {
-    const body = await request.json() as { name?: unknown; slug?: unknown };
+    const body = (await request.json()) as { name?: unknown; slug?: unknown };
     const name = cleanText(body.name, "Household name", 80);
     const slug = cleanText(body.slug, "Slug", 64).toLowerCase();
     const household = updateHousehold(id, { name, slug });

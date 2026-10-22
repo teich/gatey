@@ -11,7 +11,10 @@ export default async function NoHouseholdPage() {
       <section className="auth-card">
         <p className="eyebrow">Gatey</p>
         <h1>No household yet.</h1>
-        <p>{session.user.name}, your account is valid, but it has not been added to a household. Ask the Gatey administrator to add you.</p>
+        <p>
+          {session.user.name}, your account is valid, but it has not been added to a household. Ask the Gatey
+          administrator to add you.
+        </p>
         <SignOutButton />
       </section>
     </main>

@@ -46,21 +46,27 @@ async function unifiFetch(url: string, init: RequestInit, insecureTls: boolean):
   }
 
   return new Promise((resolve, reject) => {
-    const request = httpsRequest(url, {
-      method: init.method,
-      headers: Object.fromEntries(new Headers(init.headers).entries()),
-      agent: insecureUnifiAgent,
-      signal: init.signal ?? undefined,
-    }, (response) => {
-      const chunks: Uint8Array[] = [];
-      response.on("data", (chunk: Uint8Array) => chunks.push(chunk));
-      response.on("end", () => {
-        resolve(new Response(new Uint8Array(Buffer.concat(chunks)), {
-          status: response.statusCode || 500,
-          headers: response.headers as HeadersInit,
-        }));
-      });
-    });
+    const request = httpsRequest(
+      url,
+      {
+        method: init.method,
+        headers: Object.fromEntries(new Headers(init.headers).entries()),
+        agent: insecureUnifiAgent,
+        signal: init.signal ?? undefined,
+      },
+      (response) => {
+        const chunks: Uint8Array[] = [];
+        response.on("data", (chunk: Uint8Array) => chunks.push(chunk));
+        response.on("end", () => {
+          resolve(
+            new Response(new Uint8Array(Buffer.concat(chunks)), {
+              status: response.statusCode || 500,
+              headers: response.headers as HeadersInit,
+            }),
+          );
+        });
+      },
+    );
     request.on("error", reject);
     request.end(body || undefined);
   });
@@ -69,13 +75,17 @@ async function unifiFetch(url: string, init: RequestInit, insecureTls: boolean):
 export async function requestEnvelope<T>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
   const { baseUrl, token, insecureTls } = unifiConfig();
   const signal = init.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS);
-  const response = await unifiFetch(`${baseUrl}${path}`, {
-    ...init,
-    signal,
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(init.headers || {}) },
-    cache: "no-store",
-  }, insecureTls);
-  const body = await response.json().catch(() => ({})) as ApiResponse<T>;
+  const response = await unifiFetch(
+    `${baseUrl}${path}`,
+    {
+      ...init,
+      signal,
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(init.headers || {}) },
+      cache: "no-store",
+    },
+    insecureTls,
+  );
+  const body = (await response.json().catch(() => ({}))) as ApiResponse<T>;
   if (!response.ok || !["SUCCESS", "OK"].includes(String(body.code || "").toUpperCase())) {
     throw new Error(body.msg || body.message || body.code || `UniFi request failed (${response.status})`);
   }

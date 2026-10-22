@@ -79,22 +79,25 @@ describe("Twilio voice webhook", () => {
   it("is unavailable when phone access is disabled", async () => {
     process.env.GATEY_TWILIO_ENABLED = "false";
 
-    const response = await handleTwilioVoice(signedRequest("/twilio/voice", { From: caller.phoneE164, CallSid: "CA123" }));
+    const response = await handleTwilioVoice(
+      signedRequest("/twilio/voice", { From: caller.phoneE164, CallSid: "CA123" }),
+    );
 
     expect(response.status).toBe(404);
     expect(dependencies.findAuthorizedPhoneCaller).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid signature before looking up the caller", async () => {
-    const response = await handleTwilioVoice(signedRequest(
-      "/twilio/voice",
-      { From: caller.phoneE164, CallSid: "CA123" },
-      "invalid",
-    ));
+    const response = await handleTwilioVoice(
+      signedRequest("/twilio/voice", { From: caller.phoneE164, CallSid: "CA123" }, "invalid"),
+    );
 
     expect(response.status).toBe(403);
     expect(dependencies.findAuthorizedPhoneCaller).not.toHaveBeenCalled();
-    expect(dependencies.recordTwilioEvent).toHaveBeenCalledWith({ event: "signature_invalid", detail: "/twilio/voice" });
+    expect(dependencies.recordTwilioEvent).toHaveBeenCalledWith({
+      event: "signature_invalid",
+      detail: "/twilio/voice",
+    });
   });
 
   it("rejects oversized requests using the declared length", async () => {
@@ -110,7 +113,9 @@ describe("Twilio voice webhook", () => {
     dependencies.findAuthorizedPhoneCaller.mockReturnValue({ ...caller, canHoldOpen: false });
     process.env.TWILIO_TTS_VOICE = 'Voice"><Break time="10s"/>';
 
-    const response = await handleTwilioVoice(signedRequest("/twilio/voice", { From: caller.phoneE164, CallSid: "CA123" }));
+    const response = await handleTwilioVoice(
+      signedRequest("/twilio/voice", { From: caller.phoneE164, CallSid: "CA123" }),
+    );
     const body = await response.text();
 
     expect(response.headers.get("content-type")).toContain("text/xml");
@@ -123,11 +128,13 @@ describe("Twilio voice webhook", () => {
   it("rejects a validly signed action the caller is not allowed to perform", async () => {
     dependencies.findAuthorizedPhoneCaller.mockReturnValue({ ...caller, canHoldOpen: false });
 
-    const response = await handleTwilioVoiceConfirmation(signedRequest("/twilio/voice/confirm", {
-      From: caller.phoneE164,
-      CallSid: "CA123",
-      Digits: "2",
-    }));
+    const response = await handleTwilioVoiceConfirmation(
+      signedRequest("/twilio/voice/confirm", {
+        From: caller.phoneE164,
+        CallSid: "CA123",
+        Digits: "2",
+      }),
+    );
 
     expect(await response.text()).toContain("not authorized for that action");
     expect(dependencies.beginTwilioAction).not.toHaveBeenCalled();
@@ -140,11 +147,13 @@ describe("Twilio voice webhook", () => {
       attempt: { callSid: "CA123", action: "open", status: "succeeded", detail: "opening" },
     });
 
-    const response = await handleTwilioVoiceConfirmation(signedRequest("/twilio/voice/confirm", {
-      From: caller.phoneE164,
-      CallSid: "CA123",
-      Digits: "1",
-    }));
+    const response = await handleTwilioVoiceConfirmation(
+      signedRequest("/twilio/voice/confirm", {
+        From: caller.phoneE164,
+        CallSid: "CA123",
+        Digits: "1",
+      }),
+    );
 
     expect(await response.text()).toContain("gate is now open");
     expect(dependencies.unlockGate).not.toHaveBeenCalled();
@@ -152,46 +161,70 @@ describe("Twilio voice webhook", () => {
   });
 
   it("records one successful unlock for a new request", async () => {
-    const response = await handleTwilioVoiceConfirmation(signedRequest("/twilio/voice/confirm", {
-      From: caller.phoneE164,
-      CallSid: "CA123",
-      Digits: "1",
-    }));
+    const response = await handleTwilioVoiceConfirmation(
+      signedRequest("/twilio/voice/confirm", {
+        From: caller.phoneE164,
+        CallSid: "CA123",
+        Digits: "1",
+      }),
+    );
 
     expect(await response.text()).toContain("gate is now open");
     expect(dependencies.unlockGate).toHaveBeenCalledOnce();
-    expect(dependencies.unlockGate).toHaveBeenCalledWith(expect.objectContaining({
-      id: caller.userId,
-      source: "twilio-voice",
-      extra: expect.objectContaining({ call_sid: "CA123" }),
-    }));
+    expect(dependencies.unlockGate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: caller.userId,
+        source: "twilio-voice",
+        extra: expect.objectContaining({ call_sid: "CA123" }),
+      }),
+    );
     expect(dependencies.finishTwilioAction).toHaveBeenCalledWith("CA123", "open", "succeeded", "opening");
   });
 
   it("marks the reservation failed when the controller rejects the action", async () => {
     dependencies.unlockGate.mockRejectedValueOnce(new Error("offline"));
 
-    const response = await handleTwilioVoiceConfirmation(signedRequest("/twilio/voice/confirm", {
-      From: caller.phoneE164,
-      CallSid: "CA123",
-      Digits: "1",
-    }));
+    const response = await handleTwilioVoiceConfirmation(
+      signedRequest("/twilio/voice/confirm", {
+        From: caller.phoneE164,
+        CallSid: "CA123",
+        Digits: "1",
+      }),
+    );
 
     expect(await response.text()).toContain("Unable to open the gate");
     expect(dependencies.finishTwilioAction).toHaveBeenCalledWith("CA123", "open", "failed", "offline");
   });
 
   it("records callers whose caller ID is not fully attested, without blocking them", async () => {
-    const response = await handleTwilioVoice(signedRequest("/twilio/voice", { From: caller.phoneE164, CallSid: "CA123", StirVerstat: "TN-Validation-Passed-C" }));
+    const response = await handleTwilioVoice(
+      signedRequest("/twilio/voice", {
+        From: caller.phoneE164,
+        CallSid: "CA123",
+        StirVerstat: "TN-Validation-Passed-C",
+      }),
+    );
 
     expect(await response.text()).toContain("Press 1 now to open the gate.");
-    expect(dependencies.recordTwilioEvent).toHaveBeenCalledWith(expect.objectContaining({ event: "caller_unverified", detail: "TN-Validation-Passed-C", callSid: "CA123" }));
+    expect(dependencies.recordTwilioEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "caller_unverified", detail: "TN-Validation-Passed-C", callSid: "CA123" }),
+    );
   });
 
   it("does not flag a fully attested caller ID", async () => {
-    await handleTwilioVoice(signedRequest("/twilio/voice", { From: caller.phoneE164, CallSid: "CA123", StirVerstat: "TN-Validation-Passed-A" }));
+    await handleTwilioVoice(
+      signedRequest("/twilio/voice", {
+        From: caller.phoneE164,
+        CallSid: "CA123",
+        StirVerstat: "TN-Validation-Passed-A",
+      }),
+    );
 
-    expect(dependencies.recordTwilioEvent).not.toHaveBeenCalledWith(expect.objectContaining({ event: "caller_unverified" }));
-    expect(dependencies.recordTwilioEvent).toHaveBeenCalledWith(expect.objectContaining({ event: "caller_prompted", detail: "Caller ID: TN-Validation-Passed-A" }));
+    expect(dependencies.recordTwilioEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ event: "caller_unverified" }),
+    );
+    expect(dependencies.recordTwilioEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "caller_prompted", detail: "Caller ID: TN-Validation-Passed-A" }),
+    );
   });
 });

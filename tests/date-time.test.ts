@@ -30,14 +30,12 @@ describe("Gatey date and time conversion", () => {
     expect(gateyDateTimeInputValue(date)).toBe("2026-11-01T01:30");
   });
 
-  it.each([
-    "not-a-date",
-    "2026-02-30T10:00",
-    "2026-08-29T24:00",
-    "2026-08-29T12:60",
-  ])("rejects invalid input %s", (value) => {
-    expect(dateFromGateyDateTimeInput(value).valueOf()).toBeNaN();
-  });
+  it.each(["not-a-date", "2026-02-30T10:00", "2026-08-29T24:00", "2026-08-29T12:60"])(
+    "rejects invalid input %s",
+    (value) => {
+      expect(dateFromGateyDateTimeInput(value).valueOf()).toBeNaN();
+    },
+  );
 
   it("shifts calendar dates across month and year boundaries", () => {
     expect(shiftGateyDateKey("2026-12-31T20:00:00-08:00", 1)).toBe("2027-01-01");

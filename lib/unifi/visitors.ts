@@ -31,7 +31,12 @@ type GateCodeVisitorInput = { householdName: string; label: string; startsAt: Da
 const visitorPath = (visitorId: string) => `/visitors/${encodeURIComponent(visitorId)}`;
 
 function allDaySchedule() {
-  return Object.fromEntries(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].map((day) => [day, [{ start_time: "00:00:00", end_time: "23:59:59" }]]));
+  return Object.fromEntries(
+    ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].map((day) => [
+      day,
+      [{ start_time: "00:00:00", end_time: "23:59:59" }],
+    ]),
+  );
 }
 
 export async function generateGateCodePin(): Promise<string> {
@@ -54,7 +59,9 @@ export async function replaceSubjectPin(subjectPath: string, requestedPin?: stri
   try {
     await request<null>(`${subjectPath}/pin_codes`, { method: "PUT", ...jsonBody({ pin_code: pin }) });
   } catch (error) {
-    throw new Error(`The old PIN was removed, but UniFi could not assign the new PIN: ${error instanceof Error ? error.message : "Unknown error"}`);
+    throw new Error(
+      `The old PIN was removed, but UniFi could not assign the new PIN: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
   }
   return pin;
 }
@@ -117,7 +124,10 @@ export async function provisionAndPersistGateCode<T>(
     try {
       await discardVisitor(visitorId);
     } catch (cleanupError) {
-      throw new Error(`Gatey could not save the new code or remove its UniFi visitor: ${cleanupError instanceof Error ? cleanupError.message : "Unknown cleanup error"}`, { cause: error });
+      throw new Error(
+        `Gatey could not save the new code or remove its UniFi visitor: ${cleanupError instanceof Error ? cleanupError.message : "Unknown cleanup error"}`,
+        { cause: error },
+      );
     }
     throw error;
   }
@@ -154,7 +164,10 @@ export async function migrateVisitorGateCode<T>(
       try {
         await assignVisitorPin(input.oldVisitorId, input.pin);
       } catch (restoreError) {
-        throw new Error(`Migration failed and UniFi could not restore the original PIN: ${restoreError instanceof Error ? restoreError.message : "Unknown error"}`, { cause: error });
+        throw new Error(
+          `Migration failed and UniFi could not restore the original PIN: ${restoreError instanceof Error ? restoreError.message : "Unknown error"}`,
+          { cause: error },
+        );
       }
     }
     throw error;
@@ -172,18 +185,20 @@ export async function replaceVisitorPin(visitorId: string, requestedPin?: string
 
 export async function listVisitorInventory(): Promise<VisitorInventoryItem[]> {
   const visitors = await request<UnifiVisitor[]>("/visitors");
-  return visitors.map((visitor) => {
-    const startsAt = timestampToIso(visitor.start_time);
-    const endsAt = timestampToIso(visitor.end_time);
-    return {
-      id: visitor.id,
-      name: [visitor.first_name, visitor.last_name].filter(Boolean).join(" ") || "Unnamed visitor",
-      status: visitor.status || "UNKNOWN",
-      ...(startsAt ? { startsAt } : {}),
-      ...(endsAt ? { endsAt } : {}),
-      hasPin: Boolean(visitor.pin_code),
-      recurring: Boolean(visitor.schedule),
-      resources: (visitor.resources || []).map((resource) => resource.name || resource.type || "Unnamed location"),
-    };
-  }).sort((left, right) => (right.endsAt || "").localeCompare(left.endsAt || ""));
+  return visitors
+    .map((visitor) => {
+      const startsAt = timestampToIso(visitor.start_time);
+      const endsAt = timestampToIso(visitor.end_time);
+      return {
+        id: visitor.id,
+        name: [visitor.first_name, visitor.last_name].filter(Boolean).join(" ") || "Unnamed visitor",
+        status: visitor.status || "UNKNOWN",
+        ...(startsAt ? { startsAt } : {}),
+        ...(endsAt ? { endsAt } : {}),
+        hasPin: Boolean(visitor.pin_code),
+        recurring: Boolean(visitor.schedule),
+        resources: (visitor.resources || []).map((resource) => resource.name || resource.type || "Unnamed location"),
+      };
+    })
+    .sort((left, right) => (right.endsAt || "").localeCompare(left.endsAt || ""));
 }

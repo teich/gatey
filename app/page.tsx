@@ -9,8 +9,9 @@ export const runtime = "nodejs";
 
 export default async function HomePage() {
   const { session, household, isSystemAdmin } = await requirePageHousehold();
-  const canCallGate = listUserPhoneNumbers(session.user.id)
-    .some((phone) => phone.enabled && (phone.canOpen || phone.canHoldOpen));
+  const canCallGate = listUserPhoneNumbers(session.user.id).some(
+    (phone) => phone.enabled && (phone.canOpen || phone.canHoldOpen),
+  );
 
   return (
     <ResidentHome

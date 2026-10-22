@@ -13,8 +13,11 @@ export async function POST(request: Request) {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
-    return Response.json({
-      error: error instanceof Error ? error.message : "Could not refresh UniFi inventory.",
-    }, { status: 502, headers: { "Cache-Control": "no-store" } });
+    return Response.json(
+      {
+        error: error instanceof Error ? error.message : "Could not refresh UniFi inventory.",
+      },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
+    );
   }
 }

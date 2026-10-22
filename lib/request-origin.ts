@@ -14,6 +14,7 @@ const EXEMPT_PATHS = ["/api/auth/", "/api/internal/", "/api/shortcuts/open"];
 export function rejectsCrossOriginMutation(request: Request): boolean {
   if (SAFE_METHODS.has(request.method.toUpperCase())) return false;
   const { pathname } = new URL(request.url);
-  if (!pathname.startsWith("/api/") || EXEMPT_PATHS.some((path) => pathname === path || pathname.startsWith(path))) return false;
+  if (!pathname.startsWith("/api/") || EXEMPT_PATHS.some((path) => pathname === path || pathname.startsWith(path)))
+    return false;
   return request.headers.get("origin") !== appOrigin();
 }
