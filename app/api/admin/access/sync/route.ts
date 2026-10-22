@@ -11,6 +11,9 @@ export async function POST(request: Request) {
     seedExistingActorLinks();
     return Response.json(await syncAccessHistory(), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Access history could not be synchronized." }, { status: 502 });
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Access history could not be synchronized." },
+      { status: 502 },
+    );
   }
 }

@@ -34,15 +34,14 @@ function parseArray<T>(value?: string): T[] {
   if (!value) return [];
   try {
     const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed as T[] : [];
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
   } catch {
     return [];
   }
 }
 
 function readSnapshotRow() {
-  return database.select().from(unifiInventorySnapshot)
-    .where(eq(unifiInventorySnapshot.id, SNAPSHOT_ID)).get();
+  return database.select().from(unifiInventorySnapshot).where(eq(unifiInventorySnapshot.id, SNAPSHOT_ID)).get();
 }
 
 export function getUnifiInventorySnapshot(): InventorySnapshot {
@@ -72,39 +71,51 @@ async function performRefresh(): Promise<InventoryRefreshResult> {
     const usersJson = JSON.stringify(normalizeUsers(users));
     const visitorsJson = JSON.stringify(normalizeVisitors(visitors));
 
-    return database.transaction((tx) => {
-      const previous = tx.select().from(unifiInventorySnapshot)
-        .where(eq(unifiInventorySnapshot.id, SNAPSHOT_ID)).get();
-      const usersChanged = previous?.usersJson !== usersJson;
-      const visitorsChanged = previous?.visitorsJson !== visitorsJson;
-      const changed = usersChanged || visitorsChanged;
-      const recovered = Boolean(previous?.lastError);
-      const version = (previous?.version ?? 0) + (changed ? 1 : 0);
-      const values = {
-        usersJson,
-        visitorsJson,
-        version,
-        lastAttemptedAt: attemptedAt,
-        lastSucceededAt: attemptedAt,
-        lastChangedAt: changed ? attemptedAt : previous?.lastChangedAt ?? null,
-        lastError: "",
-        updatedAt: attemptedAt,
-      };
-      tx.insert(unifiInventorySnapshot).values({ id: SNAPSHOT_ID, ...values })
-        .onConflictDoUpdate({ target: unifiInventorySnapshot.id, set: values }).run();
-      return { changed, usersChanged, visitorsChanged, recovered, version };
-    }, { behavior: "immediate" });
+    return database.transaction(
+      (tx) => {
+        const previous = tx
+          .select()
+          .from(unifiInventorySnapshot)
+          .where(eq(unifiInventorySnapshot.id, SNAPSHOT_ID))
+          .get();
+        const usersChanged = previous?.usersJson !== usersJson;
+        const visitorsChanged = previous?.visitorsJson !== visitorsJson;
+        const changed = usersChanged || visitorsChanged;
+        const recovered = Boolean(previous?.lastError);
+        const version = (previous?.version ?? 0) + (changed ? 1 : 0);
+        const values = {
+          usersJson,
+          visitorsJson,
+          version,
+          lastAttemptedAt: attemptedAt,
+          lastSucceededAt: attemptedAt,
+          lastChangedAt: changed ? attemptedAt : (previous?.lastChangedAt ?? null),
+          lastError: "",
+          updatedAt: attemptedAt,
+        };
+        tx.insert(unifiInventorySnapshot)
+          .values({ id: SNAPSHOT_ID, ...values })
+          .onConflictDoUpdate({ target: unifiInventorySnapshot.id, set: values })
+          .run();
+        return { changed, usersChanged, visitorsChanged, recovered, version };
+      },
+      { behavior: "immediate" },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not read UniFi Access.";
-    database.insert(unifiInventorySnapshot).values({
-      id: SNAPSHOT_ID,
-      lastAttemptedAt: attemptedAt,
-      lastError: message,
-      updatedAt: attemptedAt,
-    }).onConflictDoUpdate({
-      target: unifiInventorySnapshot.id,
-      set: { lastAttemptedAt: attemptedAt, lastError: message, updatedAt: attemptedAt },
-    }).run();
+    database
+      .insert(unifiInventorySnapshot)
+      .values({
+        id: SNAPSHOT_ID,
+        lastAttemptedAt: attemptedAt,
+        lastError: message,
+        updatedAt: attemptedAt,
+      })
+      .onConflictDoUpdate({
+        target: unifiInventorySnapshot.id,
+        set: { lastAttemptedAt: attemptedAt, lastError: message, updatedAt: attemptedAt },
+      })
+      .run();
     throw error;
   }
 }

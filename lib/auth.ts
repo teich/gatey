@@ -27,11 +27,36 @@ let addBootstrapOwner: (user: CreatedUser) => Promise<void> = async () => undefi
 
 function householdHasGateyRecords(householdId: string) {
   return Boolean(
-    database.select({ id: schema.credentials.id }).from(schema.credentials).where(eq(schema.credentials.householdId, householdId)).limit(1).get()
-    ?? database.select({ id: schema.visitorPins.controllerVisitorId }).from(schema.visitorPins).where(eq(schema.visitorPins.householdId, householdId)).limit(1).get()
-    ?? database.select({ id: schema.personPins.controllerUserId }).from(schema.personPins).where(eq(schema.personPins.householdId, householdId)).limit(1).get()
-    ?? database.select({ id: schema.visitorHouseholds.controllerVisitorId }).from(schema.visitorHouseholds).where(eq(schema.visitorHouseholds.householdId, householdId)).limit(1).get()
-    ?? database.select({ id: schema.gateCodes.id }).from(schema.gateCodes).where(eq(schema.gateCodes.householdId, householdId)).limit(1).get(),
+    database
+      .select({ id: schema.credentials.id })
+      .from(schema.credentials)
+      .where(eq(schema.credentials.householdId, householdId))
+      .limit(1)
+      .get() ??
+    database
+      .select({ id: schema.visitorPins.controllerVisitorId })
+      .from(schema.visitorPins)
+      .where(eq(schema.visitorPins.householdId, householdId))
+      .limit(1)
+      .get() ??
+    database
+      .select({ id: schema.personPins.controllerUserId })
+      .from(schema.personPins)
+      .where(eq(schema.personPins.householdId, householdId))
+      .limit(1)
+      .get() ??
+    database
+      .select({ id: schema.visitorHouseholds.controllerVisitorId })
+      .from(schema.visitorHouseholds)
+      .where(eq(schema.visitorHouseholds.householdId, householdId))
+      .limit(1)
+      .get() ??
+    database
+      .select({ id: schema.gateCodes.id })
+      .from(schema.gateCodes)
+      .where(eq(schema.gateCodes.householdId, householdId))
+      .limit(1)
+      .get(),
   );
 }
 
@@ -65,17 +90,29 @@ export const auth = betterAuth({
       immutableUsername: true,
     }),
     organization({
-      allowUserToCreateOrganization: (user) => String(user.role ?? "").split(",").includes("admin"),
+      allowUserToCreateOrganization: (user) =>
+        String(user.role ?? "")
+          .split(",")
+          .includes("admin"),
       organizationHooks: {
         beforeDeleteOrganization: async ({ organization, user }) => {
           if (organization.id === INITIAL_HOUSEHOLD_ID) {
             throw APIError.fromStatus("BAD_REQUEST", { message: "The initial Gatey household cannot be deleted." });
           }
-          const otherMember = database.select({ id: schema.member.id }).from(schema.member)
-            .where(and(eq(schema.member.organizationId, organization.id), ne(schema.member.userId, user.id))).limit(1).get();
-          if (otherMember) throw APIError.fromStatus("BAD_REQUEST", { message: "Remove the household's residents before deleting it." });
+          const otherMember = database
+            .select({ id: schema.member.id })
+            .from(schema.member)
+            .where(and(eq(schema.member.organizationId, organization.id), ne(schema.member.userId, user.id)))
+            .limit(1)
+            .get();
+          if (otherMember)
+            throw APIError.fromStatus("BAD_REQUEST", {
+              message: "Remove the household's residents before deleting it.",
+            });
           if (householdHasGateyRecords(organization.id)) {
-            throw APIError.fromStatus("BAD_REQUEST", { message: "This household has Gatey records and cannot be deleted." });
+            throw APIError.fromStatus("BAD_REQUEST", {
+              message: "This household has Gatey records and cannot be deleted.",
+            });
           }
         },
       },
@@ -87,11 +124,15 @@ export const auth = betterAuth({
 
 addBootstrapOwner = async (user) => {
   const admin = bootstrapAdmin();
-  const isBootstrapAdmin = admin && (user.email.toLowerCase() === admin.email || user.username?.toLowerCase() === admin.username);
+  const isBootstrapAdmin =
+    admin && (user.email.toLowerCase() === admin.email || user.username?.toLowerCase() === admin.username);
   if (!isBootstrapAdmin) return;
 
-  const existing = database.select({ id: schema.member.id }).from(schema.member)
-    .where(and(eq(schema.member.userId, user.id), eq(schema.member.organizationId, INITIAL_HOUSEHOLD_ID))).get();
+  const existing = database
+    .select({ id: schema.member.id })
+    .from(schema.member)
+    .where(and(eq(schema.member.userId, user.id), eq(schema.member.organizationId, INITIAL_HOUSEHOLD_ID)))
+    .get();
   if (existing) return;
 
   await auth.api.addMember({

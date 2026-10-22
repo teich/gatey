@@ -15,7 +15,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/u
   if (authorization.response) return authorization.response;
   try {
     const { userId } = await context.params;
-    const body = await request.json() as Record<string, unknown>;
+    const body = (await request.json()) as Record<string, unknown>;
     const phone = createUserPhoneNumber(userId, {
       phoneE164: cleanText(body.phoneE164, "Phone number", 32),
       label: cleanText(body.label || "Mobile", "Label", 80),
@@ -28,7 +28,10 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/u
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not add this phone number.";
     const duplicate = message.includes("UNIQUE constraint failed");
-    return Response.json({ error: duplicate ? "That phone number is already assigned to a Gatey account." : message }, { status: duplicate ? 409 : 400 });
+    return Response.json(
+      { error: duplicate ? "That phone number is already assigned to a Gatey account." : message },
+      { status: duplicate ? 409 : 400 },
+    );
   }
 }
 

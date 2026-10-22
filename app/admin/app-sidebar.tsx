@@ -3,7 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HistoryIcon, HouseIcon, LayoutDashboardIcon, PhoneCallIcon, ScrollTextIcon, TicketIcon, UsersIcon } from "lucide-react";
+import {
+  HistoryIcon,
+  HouseIcon,
+  LayoutDashboardIcon,
+  PhoneCallIcon,
+  ScrollTextIcon,
+  TicketIcon,
+  UsersIcon,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -75,11 +83,16 @@ export function AppSidebar({ userName, ...props }: React.ComponentProps<typeof S
           <SidebarMenuItem>
             <SidebarMenuButton tooltip="Resident view" render={<Link href="/" />}>
               <HouseIcon />
-              <span className="min-w-0"><span className="block truncate">Resident view</span><span className="block truncate text-xs text-sidebar-foreground/60">{userName}</span></span>
+              <span className="min-w-0">
+                <span className="block truncate">Resident view</span>
+                <span className="block truncate text-xs text-sidebar-foreground/60">{userName}</span>
+              </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <p className="px-2 text-[10px] font-medium tracking-wide text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">Version {gateyVersion}</p>
+        <p className="px-2 text-[10px] font-medium tracking-wide text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">
+          Version {gateyVersion}
+        </p>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

@@ -72,9 +72,11 @@ describe("UniFi visitor PIN migration", () => {
   it("rolls the controller back if local persistence fails", async () => {
     const fetchMock = mockResponses(door(), visitor(), ok(), ok(), ok(), ok(), ok());
 
-    await expect(migrateVisitorGateCode(input, () => {
-      throw new Error("database full");
-    })).rejects.toThrow("database full");
+    await expect(
+      migrateVisitorGateCode(input, () => {
+        throw new Error("database full");
+      }),
+    ).rejects.toThrow("database full");
 
     expect(fetchMock).toHaveBeenCalledTimes(7);
     expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("/visitors/visitor-old/pin_codes");

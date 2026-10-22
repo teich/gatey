@@ -56,7 +56,11 @@ export function SignInForm() {
         onChange={(event) => setPassword(event.target.value)}
         required
       />
-      {error && <p className="form-error" role="alert">{error}</p>}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
       <button className="auth-primary-action" type="submit" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </button>

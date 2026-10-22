@@ -22,11 +22,14 @@ type ControllerVisitor = {
 };
 
 function mockInventory(users: ControllerUser[], visitors: ControllerVisitor[]) {
-  vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-    const url = String(input);
-    const data = url.includes("/users?") ? users : visitors;
-    return Response.json({ code: "SUCCESS", data });
-  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      const data = url.includes("/users?") ? users : visitors;
+      return Response.json({ code: "SUCCESS", data });
+    }),
+  );
 }
 
 describe("durable UniFi inventory cache", () => {
@@ -77,12 +80,15 @@ describe("durable UniFi inventory cache", () => {
     mockInventory([{ id: "user-1", full_name: "Ada", status: "ACTIVE" }], []);
     await expect(refreshUnifiInventory({ force: true })).resolves.toMatchObject({ recovered: false });
 
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      if (String(input).includes("/users?")) {
-        return Response.json({ code: "FAILED", msg: "controller busy" }, { status: 503 });
-      }
-      return Response.json({ code: "SUCCESS", data: [] });
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        if (String(input).includes("/users?")) {
+          return Response.json({ code: "FAILED", msg: "controller busy" }, { status: 503 });
+        }
+        return Response.json({ code: "SUCCESS", data: [] });
+      }),
+    );
     await expect(refreshUnifiInventory({ force: true })).rejects.toThrow("controller busy");
 
     const snapshot = getUnifiInventorySnapshot();

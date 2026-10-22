@@ -22,6 +22,8 @@ describe("scheduler authorization", () => {
   });
 
   it("rejects requests that arrived through the Cloudflare tunnel, even with the secret", () => {
-    expect(schedulerAuthorized(request({ authorization: "Bearer scheduler-secret", "cf-connecting-ip": "203.0.113.5" }))).toBe(false);
+    expect(
+      schedulerAuthorized(request({ authorization: "Bearer scheduler-secret", "cf-connecting-ip": "203.0.113.5" })),
+    ).toBe(false);
   });
 });

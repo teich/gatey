@@ -1,5 +1,10 @@
 import { authorizeHouseholdRequest } from "@/lib/api-authorization";
-import { createShortcutConnection, getShortcutConnection, revokeShortcutConnection, shortcutHeaders } from "@/lib/shortcuts";
+import {
+  createShortcutConnection,
+  getShortcutConnection,
+  revokeShortcutConnection,
+  shortcutHeaders,
+} from "@/lib/shortcuts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,7 +13,10 @@ export async function GET(request: Request) {
   const authorization = await authorizeHouseholdRequest(request);
   if (authorization.response) return authorization.response;
   const { session, household } = authorization.context;
-  return Response.json({ connection: getShortcutConnection(session.user.id, household.id) }, { headers: shortcutHeaders });
+  return Response.json(
+    { connection: getShortcutConnection(session.user.id, household.id) },
+    { headers: shortcutHeaders },
+  );
 }
 
 export async function POST(request: Request) {

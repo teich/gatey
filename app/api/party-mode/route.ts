@@ -1,6 +1,12 @@
 import { authorizeHouseholdRequest } from "@/lib/api-authorization";
 import { recordAuditEvent } from "@/lib/audit-log";
-import { endPartyMode, getPartyMode, PartyModeConflictError, PartyModeValidationError, schedulePartyMode } from "@/lib/party-mode";
+import {
+  endPartyMode,
+  getPartyMode,
+  PartyModeConflictError,
+  PartyModeValidationError,
+  schedulePartyMode,
+} from "@/lib/party-mode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +18,9 @@ function errorStatus(error: unknown) {
 }
 
 function messageFor(error: unknown, fallback: string) {
-  return error instanceof PartyModeConflictError || error instanceof PartyModeValidationError ? error.message : fallback;
+  return error instanceof PartyModeConflictError || error instanceof PartyModeValidationError
+    ? error.message
+    : fallback;
 }
 
 export async function GET(request: Request) {
@@ -21,7 +29,15 @@ export async function GET(request: Request) {
 
   try {
     const party = getPartyMode();
-    return Response.json({ party, canEnd: party ? party.householdId === authorization.context.household.id || authorization.context.isSystemAdmin : false }, { headers: noStoreHeaders });
+    return Response.json(
+      {
+        party,
+        canEnd: party
+          ? party.householdId === authorization.context.household.id || authorization.context.isSystemAdmin
+          : false,
+      },
+      { headers: noStoreHeaders },
+    );
   } catch {
     return Response.json({ error: "Party mode is unavailable." }, { status: 503, headers: noStoreHeaders });
   }
@@ -42,10 +58,11 @@ export async function POST(request: Request) {
   let endsAt: Date | undefined;
 
   try {
-    const body = await request.json() as { startsAt?: unknown; endsAt?: unknown };
+    const body = (await request.json()) as { startsAt?: unknown; endsAt?: unknown };
     startsAt = new Date(String(body.startsAt));
     endsAt = new Date(String(body.endsAt));
-    if (Number.isNaN(startsAt.valueOf()) || Number.isNaN(endsAt.valueOf())) throw new PartyModeValidationError("Choose a valid start and end time.");
+    if (Number.isNaN(startsAt.valueOf()) || Number.isNaN(endsAt.valueOf()))
+      throw new PartyModeValidationError("Choose a valid start and end time.");
     const party = await schedulePartyMode({
       startsAt,
       endsAt,
@@ -71,7 +88,10 @@ export async function POST(request: Request) {
         ...(endsAt && !Number.isNaN(endsAt.valueOf()) ? { endsAt: endsAt.toISOString() } : {}),
       },
     });
-    return Response.json({ error: messageFor(error, "Party mode could not be enabled. Try again.") }, { status: errorStatus(error), headers: noStoreHeaders });
+    return Response.json(
+      { error: messageFor(error, "Party mode could not be enabled. Try again.") },
+      { status: errorStatus(error), headers: noStoreHeaders },
+    );
   }
 }
 
@@ -88,11 +108,22 @@ export async function DELETE(request: Request) {
   } as const;
 
   try {
-    const party = await endPartyMode({ householdId: auditInput.householdId, isSystemAdmin: authorization.context.isSystemAdmin });
-    recordAuditEvent({ ...auditInput, action: party.state === "scheduled" ? "party.cancelled" : "party.ended", outcome: "succeeded", details: { startsAt: party.startsAt, endsAt: party.endsAt } });
+    const party = await endPartyMode({
+      householdId: auditInput.householdId,
+      isSystemAdmin: authorization.context.isSystemAdmin,
+    });
+    recordAuditEvent({
+      ...auditInput,
+      action: party.state === "scheduled" ? "party.cancelled" : "party.ended",
+      outcome: "succeeded",
+      details: { startsAt: party.startsAt, endsAt: party.endsAt },
+    });
     return Response.json({ party: null, canEnd: false }, { headers: noStoreHeaders });
   } catch (error) {
     recordAuditEvent({ ...auditInput, action: "party.ended", outcome: "failed", details: {} });
-    return Response.json({ error: messageFor(error, "Party mode could not be ended. Try again.") }, { status: errorStatus(error), headers: noStoreHeaders });
+    return Response.json(
+      { error: messageFor(error, "Party mode could not be ended. Try again.") },
+      { status: errorStatus(error), headers: noStoreHeaders },
+    );
   }
 }

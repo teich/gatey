@@ -12,7 +12,10 @@ export async function DELETE(request: Request, context: RouteContext<"/api/admin
   const member = getHouseholdMember(id, memberId);
   if (!member) return Response.json({ error: "Household member not found." }, { status: 404 });
   if (member.role.split(",").includes("owner")) {
-    return Response.json({ error: "Keep owners in place. Add another owner before changing household ownership." }, { status: 400 });
+    return Response.json(
+      { error: "Keep owners in place. Add another owner before changing household ownership." },
+      { status: 400 },
+    );
   }
 
   try {
@@ -25,6 +28,9 @@ export async function DELETE(request: Request, context: RouteContext<"/api/admin
     });
     return Response.json({ ok: true });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not remove the household member." }, { status: 400 });
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Could not remove the household member." },
+      { status: 400 },
+    );
   }
 }

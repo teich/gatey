@@ -12,7 +12,10 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
   const { id } = await context.params;
   const person = getPersonLink(id);
   if (!person?.householdId || !person.householdName) {
-    return Response.json({ error: "Assign this person to a household before resetting their password." }, { status: 409 });
+    return Response.json(
+      { error: "Assign this person to a household before resetting their password." },
+      { status: 409 },
+    );
   }
 
   try {
@@ -32,6 +35,9 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
       }),
     });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not reset this password." }, { status: 400 });
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Could not reset this password." },
+      { status: 400 },
+    );
   }
 }

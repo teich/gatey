@@ -43,11 +43,12 @@ export async function POST(request: Request) {
   if (authorization.response) return authorization.response;
 
   try {
-    const body = await request.json() as { name?: unknown; slug?: unknown };
+    const body = (await request.json()) as { name?: unknown; slug?: unknown };
     const name = cleanText(body.name, "Household name");
     const requestedSlug = typeof body.slug === "string" ? body.slug.trim() : "";
     const slug = slugFrom(requestedSlug || name);
-    if (!slug) return Response.json({ error: "Choose a household name that can make a URL-safe slug." }, { status: 400 });
+    if (!slug)
+      return Response.json({ error: "Choose a household name that can make a URL-safe slug." }, { status: 400 });
 
     const household = await auth.api.createOrganization({
       body: {
@@ -69,7 +70,12 @@ export async function PUT(request: Request) {
   if (authorization.response) return authorization.response;
 
   try {
-    const body = await request.json() as { householdId?: unknown; name?: unknown; email?: unknown; username?: unknown };
+    const body = (await request.json()) as {
+      householdId?: unknown;
+      name?: unknown;
+      email?: unknown;
+      username?: unknown;
+    };
     const householdId = cleanText(body.householdId, "Household", 1, 128);
     const household = listHouseholds().find((item) => item.id === householdId);
     if (!household) return Response.json({ error: "Household not found." }, { status: 404 });
@@ -81,7 +87,10 @@ export async function PUT(request: Request) {
     if (existingUser) {
       const currentHousehold = getUserHousehold(existingUser.id);
       if (currentHousehold) {
-        return Response.json({ error: `${existingUser.name} already belongs to ${currentHousehold.name}.` }, { status: 409 });
+        return Response.json(
+          { error: `${existingUser.name} already belongs to ${currentHousehold.name}.` },
+          { status: 409 },
+        );
       }
 
       await auth.api.addMember({
@@ -130,15 +139,31 @@ export async function PUT(request: Request) {
       throw error;
     }
 
-    return Response.json({
-      member: {
-        name,
-        email: contactEmail,
-        username,
+    return Response.json(
+      {
+        member: {
+          name,
+          email: contactEmail,
+          username,
+        },
+        ...(contactEmail
+          ? {
+              welcomeMessage: buildWelcomeMessage({
+                householdName: household.name,
+                name,
+                email: contactEmail,
+                username,
+                password,
+              }),
+            }
+          : {}),
       },
-      ...(contactEmail ? { welcomeMessage: buildWelcomeMessage({ householdName: household.name, name, email: contactEmail, username, password }) } : {}),
-    }, { status: 201 });
+      { status: 201 },
+    );
   } catch (error) {
-    return Response.json({ error: errorMessage(error, "Could not add this person to the household.") }, { status: 400 });
+    return Response.json(
+      { error: errorMessage(error, "Could not add this person to the household.") },
+      { status: 400 },
+    );
   }
 }

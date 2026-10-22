@@ -17,11 +17,15 @@ const dependencies = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api-authorization", () => ({ authorizeAdminRequest: dependencies.authorizeAdminRequest }));
-vi.mock("@/lib/auth", () => ({ auth: { api: {
-  createUser: dependencies.createUser,
-  addMember: dependencies.addMember,
-  removeUser: dependencies.removeUser,
-} } }));
+vi.mock("@/lib/auth", () => ({
+  auth: {
+    api: {
+      createUser: dependencies.createUser,
+      addMember: dependencies.addMember,
+      removeUser: dependencies.removeUser,
+    },
+  },
+}));
 vi.mock("@/lib/admin-assignments", () => ({
   assignPersonRecords: dependencies.assignPersonRecords,
   getPersonLink: dependencies.getPersonLink,
@@ -48,12 +52,14 @@ function context(id = "person-a") {
 describe("admin-managed residents", () => {
   beforeEach(() => {
     for (const mock of Object.values(dependencies)) mock.mockReset();
-    dependencies.authorizeAdminRequest.mockResolvedValue({ context: {
-      session: { user: { id: "admin-a", name: "Admin A" } },
-      household: null,
-      households: [],
-      isSystemAdmin: true,
-    } });
+    dependencies.authorizeAdminRequest.mockResolvedValue({
+      context: {
+        session: { user: { id: "admin-a", name: "Admin A" } },
+        household: null,
+        households: [],
+        isSystemAdmin: true,
+      },
+    });
     dependencies.getPersonLink.mockReturnValue(null);
     dependencies.listAssignableAccounts.mockReturnValue([]);
     dependencies.getUserHousehold.mockReturnValue(null);
@@ -64,22 +70,31 @@ describe("admin-managed residents", () => {
   });
 
   it("creates a callable resident without collecting an email address", async () => {
-    const response = await POST(new Request("https://gatey.test/api/admin/people/person-a/assignment", {
-      method: "POST",
-      body: JSON.stringify({ householdId: "home-a", name: "Jane", username: "marianella-jane", email: "" }),
-    }), context());
+    const response = await POST(
+      new Request("https://gatey.test/api/admin/people/person-a/assignment", {
+        method: "POST",
+        body: JSON.stringify({ householdId: "home-a", name: "Jane", username: "marianella-jane", email: "" }),
+      }),
+      context(),
+    );
 
     expect(response.status).toBe(201);
-    expect(dependencies.createUser).toHaveBeenCalledWith(expect.objectContaining({
-      body: expect.objectContaining({
-        email: "marianella-jane@users.gatey.invalid",
-        data: expect.objectContaining({ username: "marianella-jane", emailVerified: false }),
+    expect(dependencies.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          email: "marianella-jane@users.gatey.invalid",
+          data: expect.objectContaining({ username: "marianella-jane", emailVerified: false }),
+        }),
       }),
-    }));
-    expect(dependencies.addMember).toHaveBeenCalledWith({ body: { userId: "user-a", organizationId: "home-a", role: "member" } });
+    );
+    expect(dependencies.addMember).toHaveBeenCalledWith({
+      body: { userId: "user-a", organizationId: "home-a", role: "member" },
+    });
     expect(dependencies.linkUnifiPerson).toHaveBeenCalledWith("person-a", "user-a");
-    await expect(response.json()).resolves.toEqual(expect.objectContaining({
-      account: expect.objectContaining({ email: null }),
-    }));
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        account: expect.objectContaining({ email: null }),
+      }),
+    );
   });
 });

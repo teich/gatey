@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { envFlag } from "@/lib/env";
 
 export const cameraNames = ["person", "road"] as const;
-export type CameraName = typeof cameraNames[number];
+export type CameraName = (typeof cameraNames)[number];
 
 type CachedSnapshot = {
   image: Buffer;
@@ -51,19 +51,27 @@ async function captureSnapshot(camera: CameraName): Promise<CachedSnapshot> {
 
   const args = [
     "-hide_banner",
-    "-loglevel", "error",
-    "-rtsp_transport", "tcp",
+    "-loglevel",
+    "error",
+    "-rtsp_transport",
+    "tcp",
     ...(usesPrivateCertificate() ? ["-tls_verify", "0"] : []),
     // An HEVC stream can begin on a predicted frame whose references were sent
     // before ffmpeg connected. Waiting for the next keyframe prevents a valid
     // but visibly corrupt JPEG from being returned as the snapshot.
-    "-skip_frame", "nokey",
-    "-i", url,
-    "-frames:v", "1",
+    "-skip_frame",
+    "nokey",
+    "-i",
+    url,
+    "-frames:v",
+    "1",
     "-an",
-    "-q:v", "4",
-    "-f", "image2pipe",
-    "-vcodec", "mjpeg",
+    "-q:v",
+    "4",
+    "-f",
+    "image2pipe",
+    "-vcodec",
+    "mjpeg",
     "pipe:1",
   ];
 
@@ -98,11 +106,12 @@ async function captureSnapshot(camera: CameraName): Promise<CachedSnapshot> {
     captureProcess.on("close", (code) => {
       clearTimeout(timeout);
       const image = Buffer.concat(chunks);
-      const isCompleteJpeg = image.length >= 4
-        && image[0] === 0xff
-        && image[1] === 0xd8
-        && image[image.length - 2] === 0xff
-        && image[image.length - 1] === 0xd9;
+      const isCompleteJpeg =
+        image.length >= 4 &&
+        image[0] === 0xff &&
+        image[1] === 0xd8 &&
+        image[image.length - 2] === 0xff &&
+        image[image.length - 1] === 0xd9;
       if (code === 0 && isCompleteJpeg) {
         const capturedAt = Date.now();
         resolve({ image, capturedAt, expiresAt: capturedAt + SNAPSHOT_TTL_MS });

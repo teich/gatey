@@ -19,7 +19,7 @@ export function useGate() {
   const refresh = useCallback(async () => {
     try {
       const response = await fetch("/api/gate", { cache: "no-store" });
-      const payload = await response.json() as { state?: GateState; error?: string };
+      const payload = (await response.json()) as { state?: GateState; error?: string };
       if (!response.ok || !payload.state) throw new Error(payload.error || "Gate status is unavailable.");
       setState(payload.state);
       setError("");
@@ -30,8 +30,20 @@ export function useGate() {
   }, []);
 
   useEffect(() => {
-    const initialFetch = window.setTimeout(() => void refresh().catch((caught) => setError(caught instanceof Error ? caught.message : "Gate status is unavailable.")), 0);
-    const timer = window.setInterval(() => void refresh().catch((caught) => setError(caught instanceof Error ? caught.message : "Gate status is unavailable.")), 5_000);
+    const initialFetch = window.setTimeout(
+      () =>
+        void refresh().catch((caught) =>
+          setError(caught instanceof Error ? caught.message : "Gate status is unavailable."),
+        ),
+      0,
+    );
+    const timer = window.setInterval(
+      () =>
+        void refresh().catch((caught) =>
+          setError(caught instanceof Error ? caught.message : "Gate status is unavailable."),
+        ),
+      5_000,
+    );
     return () => {
       window.clearTimeout(initialFetch);
       window.clearInterval(timer);
@@ -44,10 +56,16 @@ export function useGate() {
     setError("");
     try {
       const response = await fetch("/api/gate", { method: "POST" });
-      const payload = await response.json() as { state?: GateState; error?: string };
+      const payload = (await response.json()) as { state?: GateState; error?: string };
       if (!response.ok || !payload.state) throw new Error(payload.error || "Gate could not be opened. Try again.");
       setState(payload.state);
-      window.setTimeout(() => void refresh().catch((caught) => setError(caught instanceof Error ? caught.message : "Gate status is unavailable.")), 1_200);
+      window.setTimeout(
+        () =>
+          void refresh().catch((caught) =>
+            setError(caught instanceof Error ? caught.message : "Gate status is unavailable."),
+          ),
+        1_200,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Gate could not be opened. Try again.");
     } finally {
@@ -63,7 +81,12 @@ export function useCameraSnapshots(configured: boolean) {
   const [refreshing, setRefreshing] = useState(false);
   const [revision, setRevision] = useState(0);
   const [expanded, setExpanded] = useState<CameraView | null>(null);
-  const refreshState = useRef<CameraRefresh>({ revision: 0, pending: new Set(CAMERA_VIEWS), loaded: false, refreshing: false });
+  const refreshState = useRef<CameraRefresh>({
+    revision: 0,
+    pending: new Set(CAMERA_VIEWS),
+    loaded: false,
+    refreshing: false,
+  });
   const refreshTimer = useRef<number | undefined>(undefined);
 
   const refresh = useCallback(() => {
@@ -118,7 +141,7 @@ export function usePartyMode() {
   const refresh = useCallback(async () => {
     try {
       const response = await fetch("/api/party-mode", { cache: "no-store" });
-      const payload = await response.json() as { party?: PartyMode | null; canEnd?: boolean; error?: string };
+      const payload = (await response.json()) as { party?: PartyMode | null; canEnd?: boolean; error?: string };
       if (!response.ok) throw new Error(payload.error || "Party mode is unavailable.");
       setParty(payload.party || null);
       setCanEnd(Boolean(payload.canEnd));
@@ -130,8 +153,20 @@ export function usePartyMode() {
   }, []);
 
   useEffect(() => {
-    const initialFetch = window.setTimeout(() => void refresh().catch((caught) => setLoadError(caught instanceof Error ? caught.message : "Party mode is unavailable.")), 0);
-    const timer = window.setInterval(() => void refresh().catch((caught) => setLoadError(caught instanceof Error ? caught.message : "Party mode is unavailable.")), 15_000);
+    const initialFetch = window.setTimeout(
+      () =>
+        void refresh().catch((caught) =>
+          setLoadError(caught instanceof Error ? caught.message : "Party mode is unavailable."),
+        ),
+      0,
+    );
+    const timer = window.setInterval(
+      () =>
+        void refresh().catch((caught) =>
+          setLoadError(caught instanceof Error ? caught.message : "Party mode is unavailable."),
+        ),
+      15_000,
+    );
     return () => {
       window.clearTimeout(initialFetch);
       window.clearInterval(timer);
@@ -166,9 +201,14 @@ export function usePartyMode() {
     setPending(true);
     setError("");
     try {
-      const response = await fetch("/api/party-mode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }) });
-      const payload = await response.json() as { party?: PartyMode | null; canEnd?: boolean; error?: string };
-      if (!response.ok || !payload.party) throw new Error(payload.error || "Party mode could not be enabled. Try again.");
+      const response = await fetch("/api/party-mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }),
+      });
+      const payload = (await response.json()) as { party?: PartyMode | null; canEnd?: boolean; error?: string };
+      if (!response.ok || !payload.party)
+        throw new Error(payload.error || "Party mode could not be enabled. Try again.");
       setParty(payload.party);
       setCanEnd(Boolean(payload.canEnd));
       setNow(Date.now());
@@ -186,7 +226,7 @@ export function usePartyMode() {
     setLoadError("");
     try {
       const response = await fetch("/api/party-mode", { method: "DELETE" });
-      const payload = await response.json() as { error?: string };
+      const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Party mode could not be ended. Try again.");
       setParty(null);
       setCanEnd(false);
@@ -198,5 +238,25 @@ export function usePartyMode() {
     }
   }
 
-  return { party, canEnd, pending, loadError, dialogOpen, setDialogOpen, startChoice, setStartChoice, startTime, setStartTime, endTime, setEndTime, error, now, setNow, refresh, openDialog, save, end };
+  return {
+    party,
+    canEnd,
+    pending,
+    loadError,
+    dialogOpen,
+    setDialogOpen,
+    startChoice,
+    setStartChoice,
+    startTime,
+    setStartTime,
+    endTime,
+    setEndTime,
+    error,
+    now,
+    setNow,
+    refresh,
+    openDialog,
+    save,
+    end,
+  };
 }

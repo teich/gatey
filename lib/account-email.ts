@@ -1,7 +1,11 @@
 export const MANAGED_ACCOUNT_EMAIL_DOMAIN = "users.gatey.invalid";
 
 export function managedAccountEmail(identifier: string) {
-  const localPart = identifier.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "-") || "resident";
+  const localPart =
+    identifier
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "-") || "resident";
   return `${localPart}@${MANAGED_ACCOUNT_EMAIL_DOMAIN}`;
 }
 

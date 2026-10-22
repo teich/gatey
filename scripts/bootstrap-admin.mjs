@@ -79,9 +79,11 @@ async function main() {
   const context = await auth.$context;
   const existing = await context.internalAdapter.findUserByEmail(admin.email);
 
-  console.log(existing
-    ? `Resetting the password for ${admin.username} (${admin.email}).`
-    : `Creating ${admin.username} (${admin.email}) as the Gatey administrator.`);
+  console.log(
+    existing
+      ? `Resetting the password for ${admin.username} (${admin.email}).`
+      : `Creating ${admin.username} (${admin.email}) as the Gatey administrator.`,
+  );
 
   const password = await askForConfirmedPassword(context.password.config);
 
@@ -104,7 +106,9 @@ async function main() {
 
   const credentialAccount = await context.internalAdapter.findCredentialAccount(existing.user.id);
   if (!credentialAccount) {
-    throw new Error(`${admin.username} exists without a password account. Refusing to modify an unexpected account shape.`);
+    throw new Error(
+      `${admin.username} exists without a password account. Refusing to modify an unexpected account shape.`,
+    );
   }
 
   const passwordHash = await context.password.hash(password);

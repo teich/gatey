@@ -6,9 +6,7 @@ type AuthorizedHousehold = RequestAuth & {
   household: NonNullable<RequestAuth["household"]>;
 };
 
-type AuthorizationResult<T> =
-  | { context: T; response?: never }
-  | { context?: never; response: Response };
+type AuthorizationResult<T> = { context: T; response?: never } | { context?: never; response: Response };
 
 export async function authorizeHouseholdRequest(request: Request): Promise<AuthorizationResult<AuthorizedHousehold>> {
   const context = await getRequestAuth(request.headers);
@@ -21,7 +19,10 @@ export async function authorizeHouseholdRequest(request: Request): Promise<Autho
   return { context: { ...context, household: context.household } };
 }
 
-export async function authorizeAdminRequest(request: Request, requireHousehold = false): Promise<AuthorizationResult<RequestAuth>> {
+export async function authorizeAdminRequest(
+  request: Request,
+  requireHousehold = false,
+): Promise<AuthorizationResult<RequestAuth>> {
   const context = await getRequestAuth(request.headers);
   if (!context) {
     return { response: Response.json({ error: "Sign in to continue." }, { status: 401 }) };

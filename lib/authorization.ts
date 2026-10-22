@@ -19,7 +19,9 @@ export type RequestAuth = {
 };
 
 function hasRole(role: unknown, expected: string) {
-  return String(role ?? "").split(",").includes(expected);
+  return String(role ?? "")
+    .split(",")
+    .includes(expected);
 }
 
 export async function getRequestAuth(requestHeaders: Headers): Promise<RequestAuth | null> {

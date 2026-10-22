@@ -3,10 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import {
-  Check,
-  X,
-} from "lucide-react";
+import { Check, X } from "lucide-react";
 import {
   CameraDialog,
   CancelCodeDialog,
@@ -35,18 +32,15 @@ import {
   type Screen,
 } from "@/app/resident/model";
 import { authClient } from "@/lib/auth-client";
-import {
-  dateFromGateyDateTimeInput,
-  gateyDateTimeInputValue,
-  gateyEndOfDay,
-} from "@/lib/date-time";
+import { dateFromGateyDateTimeInput, gateyDateTimeInputValue, gateyEndOfDay } from "@/lib/date-time";
 
 const INSTALL_CARD_DISMISSED_KEY = "gatey.install-card-dismissed";
 
 function shouldShowInstallCard() {
   if (typeof window === "undefined") return false;
   const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
-  const installed = window.matchMedia("(display-mode: standalone)").matches || navigatorWithStandalone.standalone === true;
+  const installed =
+    window.matchMedia("(display-mode: standalone)").matches || navigatorWithStandalone.standalone === true;
   try {
     return !installed && localStorage.getItem(INSTALL_CARD_DISMISSED_KEY) !== "true";
   } catch {
@@ -77,13 +71,7 @@ export function ResidentHome({
   );
   const [ready, setReady] = useState(false);
   const lastResumeRefresh = useRef(0);
-  const {
-    state: gateState,
-    opening: gateOpening,
-    error: gateError,
-    refresh: refreshGate,
-    open: openGate,
-  } = useGate();
+  const { state: gateState, opening: gateOpening, error: gateError, refresh: refreshGate, open: openGate } = useGate();
   const {
     updatedAt: cameraUpdatedAt,
     refreshing: cameraRefreshing,
@@ -148,7 +136,7 @@ export function ResidentHome({
   const refreshCodes = useCallback(async () => {
     const response = await fetch("/api/gate-codes", { cache: "no-store" });
     if (!response.ok) throw new Error("Could not load your gate codes.");
-    const { codes } = await response.json() as { codes: GateCodeResponse[] };
+    const { codes } = (await response.json()) as { codes: GateCodeResponse[] };
     setGuestCodes(codes.filter((code) => code.kind === "temporary"));
     const managedPermanentCodes: PermanentCode[] = codes
       .filter((code) => code.kind !== "temporary" && code.state === "active")
@@ -182,7 +170,9 @@ export function ResidentHome({
 
       setNow(currentTime);
       refreshCameras();
-      void refreshCodes().catch((caught) => setCodesError(caught instanceof Error ? caught.message : "Could not load your gate codes."));
+      void refreshCodes().catch((caught) =>
+        setCodesError(caught instanceof Error ? caught.message : "Could not load your gate codes."),
+      );
       void refreshGate().catch(() => undefined);
       void refreshParty().catch(() => undefined);
       router.refresh();
@@ -270,9 +260,14 @@ export function ResidentHome({
       const response = await fetch("/api/gate-codes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: label.trim() || "Guest", kind: "temporary", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }),
+        body: JSON.stringify({
+          label: label.trim() || "Guest",
+          kind: "temporary",
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+        }),
       });
-      const result = await response.json() as { code?: GuestCode; error?: string };
+      const result = (await response.json()) as { code?: GuestCode; error?: string };
       if (!response.ok || !result.code) throw new Error(result.error || "Could not create the guest code.");
       setGuestCodes((currentCodes) => [result.code!, ...currentCodes]);
       setCreatedCode(result.code);
@@ -305,9 +300,11 @@ export function ResidentHome({
     if (!cancelTarget) return;
     try {
       const response = await fetch(`/api/gate-codes/${cancelTarget.id}`, { method: "DELETE" });
-      const result = await response.json() as { error?: string };
+      const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error || "Could not cancel the guest code.");
-      setGuestCodes((current) => current.map((code) => code.id === cancelTarget.id ? { ...code, revokedAt: new Date().toISOString() } : code));
+      setGuestCodes((current) =>
+        current.map((code) => (code.id === cancelTarget.id ? { ...code, revokedAt: new Date().toISOString() } : code)),
+      );
       setCancelTarget(null);
     } catch (caught) {
       setCodesError(caught instanceof Error ? caught.message : "Could not cancel the guest code.");
@@ -321,7 +318,7 @@ export function ResidentHome({
     setExpireError("");
     try {
       const response = await fetch(`/api/gate-codes/${expireTarget.id}`, { method: "DELETE" });
-      const result = await response.json() as { error?: string };
+      const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error || "Could not expire the ongoing code.");
       setPermanentCodes((current) => current.filter((code) => code.id !== expireTarget.id));
       setPreviewNotice(`${expireTarget.label} was expired.`);
@@ -365,16 +362,33 @@ export function ResidentHome({
     }
     try {
       if (codeDialog === "household" && codeTargetId) {
-        const response = await fetch(`/api/gate-codes/${codeTargetId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: `${householdName} gate code`, pin: codePin }) });
-        const result = await response.json() as { code?: PermanentCode; error?: string };
+        const response = await fetch(`/api/gate-codes/${codeTargetId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label: `${householdName} gate code`, pin: codePin }),
+        });
+        const result = (await response.json()) as { code?: PermanentCode; error?: string };
         if (!response.ok || !result.code) throw new Error(result.error || "Could not change the home code.");
-        setPermanentCodes((current) => current.map((code) => code.id === codeTargetId ? { ...result.code!, kind: "household" } : code));
+        setPermanentCodes((current) =>
+          current.map((code) => (code.id === codeTargetId ? { ...result.code!, kind: "household" } : code)),
+        );
       } else {
         const isHome = codeDialog === "household";
-        const response = await fetch("/api/gate-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: isHome ? `${householdName} gate code` : codeName.trim(), pin: codePin, kind: isHome ? "home" : "ongoing" }) });
-        const result = await response.json() as { code?: PermanentCode; error?: string };
+        const response = await fetch("/api/gate-codes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label: isHome ? `${householdName} gate code` : codeName.trim(),
+            pin: codePin,
+            kind: isHome ? "home" : "ongoing",
+          }),
+        });
+        const result = (await response.json()) as { code?: PermanentCode; error?: string };
         if (!response.ok || !result.code) throw new Error(result.error || "Could not save this gate code.");
-        setPermanentCodes((current) => [...current, { ...result.code!, kind: isHome ? "household" : "person", managedByGatey: true }]);
+        setPermanentCodes((current) => [
+          ...current,
+          { ...result.code!, kind: isHome ? "household" : "person", managedByGatey: true },
+        ]);
       }
       setPreviewNotice(codeDialog === "household" ? "Home gate code saved." : `${codeName.trim()} was added.`);
       setCodeDialog(null);
@@ -430,40 +444,202 @@ export function ResidentHome({
   }
 
   if (screen === "create") {
-    return <CreateCodeScreen label={label} duration={duration} customStart={customStart} customEnd={customEnd} error={createError} onBack={() => setScreen("codes")} onLabelChange={setLabel} onDurationChange={setDuration} onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd} onSubmit={createCode} />;
+    return (
+      <CreateCodeScreen
+        label={label}
+        duration={duration}
+        customStart={customStart}
+        customEnd={customEnd}
+        error={createError}
+        onBack={() => setScreen("codes")}
+        onLabelChange={setLabel}
+        onDurationChange={setDuration}
+        onCustomStartChange={setCustomStart}
+        onCustomEndChange={setCustomEnd}
+        onSubmit={createCode}
+      />
+    );
   }
 
   if (screen === "success" && createdCode) {
-    return <CodeCreatedScreen code={createdCode} copied={copiedId === createdCode.id} onShare={() => void shareCode(createdCode)} onCopy={() => void copyCode(createdCode)} onDone={() => setScreen("codes")} />;
+    return (
+      <CodeCreatedScreen
+        code={createdCode}
+        copied={copiedId === createdCode.id}
+        onShare={() => void shareCode(createdCode)}
+        onCopy={() => void copyCode(createdCode)}
+        onDone={() => setScreen("codes")}
+      />
+    );
   }
 
   return (
     <main className="resident-shell">
       <header className="resident-topbar">
-        <div className="resident-brand"><Image src="/gatey-icon-192.png" alt="" width={48} height={48} priority /><div><p>Gatey</p><h1>{householdName}</h1></div></div>
+        <div className="resident-brand">
+          <Image src="/gatey-icon-192.png" alt="" width={48} height={48} priority />
+          <div>
+            <p>Gatey</p>
+            <h1>{householdName}</h1>
+          </div>
+        </div>
       </header>
 
-      {previewNotice ? <div className="resident-toast" role="status"><Check aria-hidden="true" /><span>{previewNotice}</span><button type="button" onClick={() => setPreviewNotice("")} aria-label="Dismiss"><X aria-hidden="true" /></button></div> : null}
+      {previewNotice ? (
+        <div className="resident-toast" role="status">
+          <Check aria-hidden="true" />
+          <span>{previewNotice}</span>
+          <button type="button" onClick={() => setPreviewNotice("")} aria-label="Dismiss">
+            <X aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
 
-      {screen === "gate" ? <GateScreen householdName={householdName} gateState={gateState} gateOpening={gateOpening} gateError={gateError} gatePhoneNumber={gatePhoneNumber} party={party} partyCanEnd={partyCanEnd} partyPending={partyPending} partyLoadError={partyLoadError} now={now} grouped={grouped} ready={ready} householdCode={householdCode} camerasConfigured={camerasConfigured} cameraRevision={cameraRevision} cameraUpdatedAt={cameraUpdatedAt} cameraRefreshing={cameraRefreshing} onCameraSettled={cameraSettled} onExpandCamera={setExpandedCamera} onRefreshCameras={refreshCameras} onOpenGate={() => void openGate()} onOpenParty={openPartyDialog} onEndParty={() => void endParty()} onCreateCode={openCreate} onOpenCodes={() => setScreen("codes")} /> : null}
+      {screen === "gate" ? (
+        <GateScreen
+          householdName={householdName}
+          gateState={gateState}
+          gateOpening={gateOpening}
+          gateError={gateError}
+          gatePhoneNumber={gatePhoneNumber}
+          party={party}
+          partyCanEnd={partyCanEnd}
+          partyPending={partyPending}
+          partyLoadError={partyLoadError}
+          now={now}
+          grouped={grouped}
+          ready={ready}
+          householdCode={householdCode}
+          camerasConfigured={camerasConfigured}
+          cameraRevision={cameraRevision}
+          cameraUpdatedAt={cameraUpdatedAt}
+          cameraRefreshing={cameraRefreshing}
+          onCameraSettled={cameraSettled}
+          onExpandCamera={setExpandedCamera}
+          onRefreshCameras={refreshCameras}
+          onOpenGate={() => void openGate()}
+          onOpenParty={openPartyDialog}
+          onEndParty={() => void endParty()}
+          onCreateCode={openCreate}
+          onOpenCodes={() => setScreen("codes")}
+        />
+      ) : null}
 
-      {screen === "codes" ? <CodesScreen householdName={householdName} householdCode={householdCode} personalCodes={personalCodes} grouped={grouped} ready={ready} copiedId={copiedId} pastOpen={pastOpen} error={codesError} onOpenHouseCode={openHouseCodeDialog} onOpenPersonCode={openPersonCodeDialog} onCreateCode={openCreate} onExpire={(code) => { setExpireError(""); setExpireTarget(code); }} onCopy={(code) => void copyCode(code)} onShare={(code) => void shareCode(code)} onCancel={setCancelTarget} onTogglePast={() => setPastOpen((open) => !open)} /> : null}
+      {screen === "codes" ? (
+        <CodesScreen
+          householdName={householdName}
+          householdCode={householdCode}
+          personalCodes={personalCodes}
+          grouped={grouped}
+          ready={ready}
+          copiedId={copiedId}
+          pastOpen={pastOpen}
+          error={codesError}
+          onOpenHouseCode={openHouseCodeDialog}
+          onOpenPersonCode={openPersonCodeDialog}
+          onCreateCode={openCreate}
+          onExpire={(code) => {
+            setExpireError("");
+            setExpireTarget(code);
+          }}
+          onCopy={(code) => void copyCode(code)}
+          onShare={(code) => void shareCode(code)}
+          onCancel={setCancelTarget}
+          onTogglePast={() => setPastOpen((open) => !open)}
+        />
+      ) : null}
 
-      {screen === "more" ? <MoreScreen gatePhoneNumber={gatePhoneNumber} showInstallCard={showInstallCard} userName={userName} householdName={householdName} isSystemAdmin={isSystemAdmin} onDismissInstall={dismissInstallCard} onOpenPassword={openPasswordDialog} onSignOut={() => void signOut()} /> : null}
+      {screen === "more" ? (
+        <MoreScreen
+          gatePhoneNumber={gatePhoneNumber}
+          showInstallCard={showInstallCard}
+          userName={userName}
+          householdName={householdName}
+          isSystemAdmin={isSystemAdmin}
+          onDismissInstall={dismissInstallCard}
+          onOpenPassword={openPasswordDialog}
+          onSignOut={() => void signOut()}
+        />
+      ) : null}
 
       <ResidentNavigation screen={screen} onChange={setScreen} />
 
-      {expandedCamera ? <CameraDialog camera={expandedCamera} revision={cameraRevision} configured={camerasConfigured} updatedAt={cameraUpdatedAt} refreshing={cameraRefreshing} onSettled={cameraSettled} onRefresh={refreshCameras} onClose={() => setExpandedCamera(null)} /> : null}
+      {expandedCamera ? (
+        <CameraDialog
+          camera={expandedCamera}
+          revision={cameraRevision}
+          configured={camerasConfigured}
+          updatedAt={cameraUpdatedAt}
+          refreshing={cameraRefreshing}
+          onSettled={cameraSettled}
+          onRefresh={refreshCameras}
+          onClose={() => setExpandedCamera(null)}
+        />
+      ) : null}
 
-      {partyDialogOpen ? <PartyDialog pending={partyPending} startChoice={partyStartChoice} startTime={partyStartTime} endTime={partyEndTime} error={partyError} onStartChoiceChange={setPartyStartChoice} onStartTimeChange={setPartyStartTime} onEndTimeChange={setPartyEndTime} onSubmit={saveParty} onClose={() => setPartyDialogOpen(false)} /> : null}
+      {partyDialogOpen ? (
+        <PartyDialog
+          pending={partyPending}
+          startChoice={partyStartChoice}
+          startTime={partyStartTime}
+          endTime={partyEndTime}
+          error={partyError}
+          onStartChoiceChange={setPartyStartChoice}
+          onStartTimeChange={setPartyStartTime}
+          onEndTimeChange={setPartyEndTime}
+          onSubmit={saveParty}
+          onClose={() => setPartyDialogOpen(false)}
+        />
+      ) : null}
 
-      {codeDialog ? <GateCodeDialog mode={codeDialog} householdName={householdName} householdCode={householdCode} name={codeName} pin={codePin} error={codeError} onNameChange={setCodeName} onPinChange={setCodePin} onSubmit={savePermanentCode} onClose={() => setCodeDialog(null)} /> : null}
+      {codeDialog ? (
+        <GateCodeDialog
+          mode={codeDialog}
+          householdName={householdName}
+          householdCode={householdCode}
+          name={codeName}
+          pin={codePin}
+          error={codeError}
+          onNameChange={setCodeName}
+          onPinChange={setCodePin}
+          onSubmit={savePermanentCode}
+          onClose={() => setCodeDialog(null)}
+        />
+      ) : null}
 
-      {cancelTarget ? <CancelCodeDialog code={cancelTarget} onConfirm={() => void confirmCancel()} onClose={() => setCancelTarget(null)} /> : null}
+      {cancelTarget ? (
+        <CancelCodeDialog
+          code={cancelTarget}
+          onConfirm={() => void confirmCancel()}
+          onClose={() => setCancelTarget(null)}
+        />
+      ) : null}
 
-      {expireTarget ? <ExpireCodeDialog code={expireTarget} pending={expirePending} error={expireError} onConfirm={() => void confirmExpire()} onClose={() => setExpireTarget(null)} /> : null}
+      {expireTarget ? (
+        <ExpireCodeDialog
+          code={expireTarget}
+          pending={expirePending}
+          error={expireError}
+          onConfirm={() => void confirmExpire()}
+          onClose={() => setExpireTarget(null)}
+        />
+      ) : null}
 
-      {passwordDialogOpen ? <PasswordDialog currentPassword={currentPassword} newPassword={newPassword} confirmation={passwordConfirmation} pending={passwordPending} error={passwordError} success={passwordSuccess} onCurrentPasswordChange={setCurrentPassword} onNewPasswordChange={setNewPassword} onConfirmationChange={setPasswordConfirmation} onSubmit={changePassword} onClose={() => !passwordPending && setPasswordDialogOpen(false)} /> : null}
+      {passwordDialogOpen ? (
+        <PasswordDialog
+          currentPassword={currentPassword}
+          newPassword={newPassword}
+          confirmation={passwordConfirmation}
+          pending={passwordPending}
+          error={passwordError}
+          success={passwordSuccess}
+          onCurrentPasswordChange={setCurrentPassword}
+          onNewPasswordChange={setNewPassword}
+          onConfirmationChange={setPasswordConfirmation}
+          onSubmit={changePassword}
+          onClose={() => !passwordPending && setPasswordDialogOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }

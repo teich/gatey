@@ -19,7 +19,9 @@ export type AuditEvent = {
 
 // Audit logging records what already happened, usually after the controller
 // accepted a physical action, so a logging failure is reported but never thrown.
-export function recordAuditEvent(input: Omit<AuditEvent, "id" | "occurredAt"> & { details?: Record<string, string | null> }) {
+export function recordAuditEvent(
+  input: Omit<AuditEvent, "id" | "occurredAt"> & { details?: Record<string, string | null> },
+) {
   try {
     insertAuditEvent(input);
   } catch (error) {
@@ -28,17 +30,20 @@ export function recordAuditEvent(input: Omit<AuditEvent, "id" | "occurredAt"> & 
 }
 
 function insertAuditEvent(input: Omit<AuditEvent, "id" | "occurredAt"> & { details?: Record<string, string | null> }) {
-  database.insert(auditEvents).values({
-    id: randomUUID(),
-    occurredAt: new Date().toISOString(),
-    actorUserId: input.actorUserId,
-    actorName: input.actorName.slice(0, 160),
-    householdId: input.householdId,
-    householdName: input.householdName?.slice(0, 160) ?? null,
-    action: input.action,
-    outcome: input.outcome,
-    details: input.details ?? {},
-  }).run();
+  database
+    .insert(auditEvents)
+    .values({
+      id: randomUUID(),
+      occurredAt: new Date().toISOString(),
+      actorUserId: input.actorUserId,
+      actorName: input.actorName.slice(0, 160),
+      householdId: input.householdId,
+      householdName: input.householdName?.slice(0, 160) ?? null,
+      action: input.action,
+      outcome: input.outcome,
+      details: input.details ?? {},
+    })
+    .run();
 }
 
 export function listAuditEvents(limit = 200): AuditEvent[] {

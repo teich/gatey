@@ -21,7 +21,7 @@ export function AdminInventoryRefresh() {
     async function refresh() {
       try {
         const response = await fetch("/api/admin/inventory/refresh", { method: "POST" });
-        const result = await response.json() as RefreshResult;
+        const result = (await response.json()) as RefreshResult;
         if (cancelled || !response.ok || (!result.changed && !result.recovered)) return;
 
         const root = document.documentElement;

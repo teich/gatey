@@ -34,8 +34,8 @@ function partyInput(startsAt: Date, endsAt: Date, householdId = "home-a") {
 }
 
 function storedState() {
-  return database.select({ state: partyModeTable.state }).from(partyModeTable)
-    .where(eq(partyModeTable.id, 1)).get()?.state;
+  return database.select({ state: partyModeTable.state }).from(partyModeTable).where(eq(partyModeTable.id, 1)).get()
+    ?.state;
 }
 
 describe("party-mode state machine", () => {
@@ -48,9 +48,11 @@ describe("party-mode state machine", () => {
     if (globalParty.gateyPartyTimer) clearTimeout(globalParty.gateyPartyTimer);
     delete globalParty.gateyPartyTimer;
     database.delete(partyModeTable).run();
-    for (const [id, name] of [["home-a", "Home A"], ["home-b", "Home B"]]) {
-      database.insert(organization).values({ id, name, slug: id, createdAt: NOW })
-        .onConflictDoNothing().run();
+    for (const [id, name] of [
+      ["home-a", "Home A"],
+      ["home-b", "Home B"],
+    ]) {
+      database.insert(organization).values({ id, name, slug: id, createdAt: NOW }).onConflictDoNothing().run();
     }
   });
 
@@ -62,10 +64,9 @@ describe("party-mode state machine", () => {
   });
 
   it("keeps a future request scheduled without contacting the controller", async () => {
-    const party = await schedulePartyMode(partyInput(
-      new Date(NOW.getTime() + 60_000),
-      new Date(NOW.getTime() + 3_600_000),
-    ));
+    const party = await schedulePartyMode(
+      partyInput(new Date(NOW.getTime() + 60_000), new Date(NOW.getTime() + 3_600_000)),
+    );
 
     expect(party?.state).toBe("scheduled");
     expect(storedState()).toBe("scheduled");
@@ -73,12 +74,12 @@ describe("party-mode state machine", () => {
   });
 
   it("starts a due schedule exactly once across repeated reconciliation", async () => {
-    await schedulePartyMode(partyInput(
-      new Date(NOW.getTime() + 60_000),
-      new Date(NOW.getTime() + 3_600_000),
-    ));
-    database.update(partyModeTable).set({ startsAt: new Date(NOW.getTime() - 1_000).toISOString() })
-      .where(eq(partyModeTable.id, 1)).run();
+    await schedulePartyMode(partyInput(new Date(NOW.getTime() + 60_000), new Date(NOW.getTime() + 3_600_000)));
+    database
+      .update(partyModeTable)
+      .set({ startsAt: new Date(NOW.getTime() - 1_000).toISOString() })
+      .where(eq(partyModeTable.id, 1))
+      .run();
 
     const first = await reconcilePartyMode();
     const second = await reconcilePartyMode();
@@ -90,49 +91,37 @@ describe("party-mode state machine", () => {
 
   it("records a failed state when the controller cannot start a due schedule", async () => {
     controller.holdGateOpenUntil.mockRejectedValueOnce(new Error("controller unavailable"));
-    await expect(schedulePartyMode(partyInput(
-      NOW,
-      new Date(NOW.getTime() + 3_600_000),
-    ))).rejects.toThrow("UniFi could not hold the gate open");
+    await expect(schedulePartyMode(partyInput(NOW, new Date(NOW.getTime() + 3_600_000)))).rejects.toThrow(
+      "UniFi could not hold the gate open",
+    );
 
     expect(storedState()).toBe("failed");
     expect(await reconcilePartyMode()).toBeNull();
   });
 
   it("rejects past, cross-day, and backwards schedules", async () => {
-    await expect(schedulePartyMode(partyInput(
-      new Date(NOW.getTime() - 60_000),
-      new Date(NOW.getTime() + 60_000),
-    ))).rejects.toBeInstanceOf(PartyModeValidationError);
-    await expect(schedulePartyMode(partyInput(
-      new Date(NOW.getTime() + 60_000),
-      new Date("2026-08-30T20:00:00.000Z"),
-    ))).rejects.toBeInstanceOf(PartyModeValidationError);
-    await expect(schedulePartyMode(partyInput(
-      new Date(NOW.getTime() + 120_000),
-      new Date(NOW.getTime() + 60_000),
-    ))).rejects.toBeInstanceOf(PartyModeValidationError);
+    await expect(
+      schedulePartyMode(partyInput(new Date(NOW.getTime() - 60_000), new Date(NOW.getTime() + 60_000))),
+    ).rejects.toBeInstanceOf(PartyModeValidationError);
+    await expect(
+      schedulePartyMode(partyInput(new Date(NOW.getTime() + 60_000), new Date("2026-08-30T20:00:00.000Z"))),
+    ).rejects.toBeInstanceOf(PartyModeValidationError);
+    await expect(
+      schedulePartyMode(partyInput(new Date(NOW.getTime() + 120_000), new Date(NOW.getTime() + 60_000))),
+    ).rejects.toBeInstanceOf(PartyModeValidationError);
   });
 
   it("does not let a second household replace an unexpired schedule", async () => {
-    await schedulePartyMode(partyInput(
-      new Date(NOW.getTime() + 60_000),
-      new Date(NOW.getTime() + 3_600_000),
-    ));
+    await schedulePartyMode(partyInput(new Date(NOW.getTime() + 60_000), new Date(NOW.getTime() + 3_600_000)));
 
-    await expect(schedulePartyMode(partyInput(
-      new Date(NOW.getTime() + 120_000),
-      new Date(NOW.getTime() + 7_200_000),
-      "home-b",
-    ))).rejects.toBeInstanceOf(PartyModeConflictError);
+    await expect(
+      schedulePartyMode(partyInput(new Date(NOW.getTime() + 120_000), new Date(NOW.getTime() + 7_200_000), "home-b")),
+    ).rejects.toBeInstanceOf(PartyModeConflictError);
     expect(storedState()).toBe("scheduled");
   });
 
   it("lets the owner cancel a schedule without calling the controller", async () => {
-    await schedulePartyMode(partyInput(
-      new Date(NOW.getTime() + 60_000),
-      new Date(NOW.getTime() + 3_600_000),
-    ));
+    await schedulePartyMode(partyInput(new Date(NOW.getTime() + 60_000), new Date(NOW.getTime() + 3_600_000)));
 
     await endPartyMode({ householdId: "home-a", isSystemAdmin: false });
 
@@ -143,8 +132,9 @@ describe("party-mode state machine", () => {
   it("protects another household's active hold but permits an administrator", async () => {
     await schedulePartyMode(partyInput(NOW, new Date(NOW.getTime() + 3_600_000)));
 
-    await expect(endPartyMode({ householdId: "home-b", isSystemAdmin: false }))
-      .rejects.toBeInstanceOf(PartyModeConflictError);
+    await expect(endPartyMode({ householdId: "home-b", isSystemAdmin: false })).rejects.toBeInstanceOf(
+      PartyModeConflictError,
+    );
     expect(storedState()).toBe("active");
 
     await endPartyMode({ householdId: "home-b", isSystemAdmin: true });
@@ -156,8 +146,9 @@ describe("party-mode state machine", () => {
     await schedulePartyMode(partyInput(NOW, new Date(NOW.getTime() + 3_600_000)));
     controller.endGateHoldOpen.mockRejectedValueOnce(new Error("controller unavailable"));
 
-    await expect(endPartyMode({ householdId: "home-a", isSystemAdmin: false }))
-      .rejects.toThrow("controller unavailable");
+    await expect(endPartyMode({ householdId: "home-a", isSystemAdmin: false })).rejects.toThrow(
+      "controller unavailable",
+    );
     expect(storedState()).toBe("active");
   });
 
@@ -165,8 +156,11 @@ describe("party-mode state machine", () => {
     await schedulePartyMode(partyInput(NOW, new Date(NOW.getTime() + 3_600_000)));
     controller.holdGateOpenUntil.mockClear();
     // Simulate a restart while the end request was in flight.
-    database.update(partyModeTable).set({ state: "ending", updatedAt: new Date(NOW.getTime() - 60_000).toISOString() })
-      .where(eq(partyModeTable.id, 1)).run();
+    database
+      .update(partyModeTable)
+      .set({ state: "ending", updatedAt: new Date(NOW.getTime() - 60_000).toISOString() })
+      .where(eq(partyModeTable.id, 1))
+      .run();
 
     expect(getPartyMode()?.state).toBe("active");
     expect(await reconcilePartyMode()).toBeNull();
@@ -179,16 +173,14 @@ describe("party-mode state machine", () => {
     await schedulePartyMode(partyInput(NOW, new Date(NOW.getTime() + 3_600_000)));
     database.update(partyModeTable).set({ state: "ending" }).where(eq(partyModeTable.id, 1)).run();
 
-    await expect(endPartyMode({ householdId: "home-a", isSystemAdmin: false }))
-      .rejects.toBeInstanceOf(PartyModeConflictError);
+    await expect(endPartyMode({ householdId: "home-a", isSystemAdmin: false })).rejects.toBeInstanceOf(
+      PartyModeConflictError,
+    );
     expect(controller.endGateHoldOpen).not.toHaveBeenCalled();
   });
 
   it("reads party mode without contacting the controller", async () => {
-    await schedulePartyMode(partyInput(
-      new Date(NOW.getTime() + 60_000),
-      new Date(NOW.getTime() + 3_600_000),
-    ));
+    await schedulePartyMode(partyInput(new Date(NOW.getTime() + 60_000), new Date(NOW.getTime() + 3_600_000)));
     vi.setSystemTime(new Date(NOW.getTime() + 120_000));
 
     expect(getPartyMode()?.state).toBe("scheduled");

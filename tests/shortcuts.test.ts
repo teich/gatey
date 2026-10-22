@@ -5,7 +5,13 @@ vi.mock("@/lib/api-authorization", () => ({ authorizeHouseholdRequest: mocks.aut
 vi.mock("@/lib/unifi-access", () => ({ unlockGate: mocks.unlockGate }));
 
 import { sqlite } from "@/lib/database";
-import { claimShortcutOpen, createShortcutConnection, getShortcutConnection, revokeShortcutConnection, SHORTCUT_COOLDOWN_MS } from "@/lib/shortcuts";
+import {
+  claimShortcutOpen,
+  createShortcutConnection,
+  getShortcutConnection,
+  revokeShortcutConnection,
+  SHORTCUT_COOLDOWN_MS,
+} from "@/lib/shortcuts";
 import { POST as open } from "@/app/api/shortcuts/open/route";
 import { GET, POST, DELETE } from "@/app/api/shortcuts/route";
 import { rejectsCrossOriginMutation } from "@/lib/request-origin";
@@ -15,24 +21,39 @@ function connect(userId = "alice", householdId = "home", now = Date.now()) {
 }
 
 function openRequest(token: string) {
-  return new Request("https://gatey.test/api/shortcuts/open", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  return new Request("https://gatey.test/api/shortcuts/open", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
 beforeEach(() => {
   process.env.BETTER_AUTH_URL = "https://gatey.test";
-  sqlite.exec(`DELETE FROM shortcut_pairings; DELETE FROM shortcut_connections; DELETE FROM audit_events; DELETE FROM member; DELETE FROM organization; DELETE FROM user;`);
+  sqlite.exec(
+    `DELETE FROM shortcut_pairings; DELETE FROM shortcut_connections; DELETE FROM audit_events; DELETE FROM member; DELETE FROM organization; DELETE FROM user;`,
+  );
   for (const id of ["alice", "bob"]) {
-    sqlite.prepare("INSERT INTO user (id, name, email, email_verified, created_at, updated_at) VALUES (?, ?, ?, 0, 0, 0)").run(id, id, `${id}@test.invalid`);
+    sqlite
+      .prepare("INSERT INTO user (id, name, email, email_verified, created_at, updated_at) VALUES (?, ?, ?, 0, 0, 0)")
+      .run(id, id, `${id}@test.invalid`);
   }
-  sqlite.exec("INSERT INTO organization (id, name, slug, created_at) VALUES ('home', 'Home', 'home', 0), ('other', 'Other', 'other', 0)");
-  sqlite.exec("INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES ('ma', 'home', 'alice', 'member', 0), ('mb', 'other', 'bob', 'member', 0)");
-  mocks.authorizeHouseholdRequest.mockResolvedValue({ context: { session: { user: { id: "alice", name: "Alice" } }, household: { id: "home", name: "Home" } } });
+  sqlite.exec(
+    "INSERT INTO organization (id, name, slug, created_at) VALUES ('home', 'Home', 'home', 0), ('other', 'Other', 'other', 0)",
+  );
+  sqlite.exec(
+    "INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES ('ma', 'home', 'alice', 'member', 0), ('mb', 'other', 'bob', 'member', 0)",
+  );
+  mocks.authorizeHouseholdRequest.mockResolvedValue({
+    context: { session: { user: { id: "alice", name: "Alice" } }, household: { id: "home", name: "Home" } },
+  });
   mocks.unlockGate.mockResolvedValue({ state: "open" });
 });
 
 describe("shortcut access", () => {
   it("issues a key directly without opening and stores only its hash", async () => {
-    const response = await POST(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }));
+    const response = await POST(
+      new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }),
+    );
     const result = await response.json();
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("no-store");
@@ -87,7 +108,12 @@ describe("shortcut routes", () => {
     expect(response.status).toBe(200);
     expect(mocks.unlockGate).toHaveBeenCalledWith({ id: "alice", name: "alice" });
     expect(getShortcutConnection("alice", "home")?.lastUsedAt).toBeTypeOf("number");
-    expect(sqlite.prepare("SELECT actor_user_id, action, outcome, details FROM audit_events").get()).toEqual({ actor_user_id: "alice", action: "gate.open", outcome: "succeeded", details: JSON.stringify({ source: "shortcut" }) });
+    expect(sqlite.prepare("SELECT actor_user_id, action, outcome, details FROM audit_events").get()).toEqual({
+      actor_user_id: "alice",
+      action: "gate.open",
+      outcome: "succeeded",
+      details: JSON.stringify({ source: "shortcut" }),
+    });
     expect((await open(openRequest(token))).status).toBe(429);
     expect(mocks.unlockGate).toHaveBeenCalledTimes(1);
   });
@@ -113,10 +139,16 @@ describe("shortcut routes", () => {
   it("protects setup mutations from cross-origin requests", () => {
     for (const origin of ["https://evil.test", "https://other.gatey.test", "null", ""]) {
       for (const method of ["POST", "DELETE"]) {
-        expect(rejectsCrossOriginMutation(new Request("https://gatey.test/api/shortcuts", { method, headers: { origin } }))).toBe(true);
+        expect(
+          rejectsCrossOriginMutation(new Request("https://gatey.test/api/shortcuts", { method, headers: { origin } })),
+        ).toBe(true);
       }
     }
-    expect(rejectsCrossOriginMutation(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }))).toBe(false);
+    expect(
+      rejectsCrossOriginMutation(
+        new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }),
+      ),
+    ).toBe(false);
     expect(rejectsCrossOriginMutation(new Request("https://gatey.test/api/shortcuts"))).toBe(false);
     // The native shortcut authenticates with its own bearer token.
     expect(rejectsCrossOriginMutation(openRequest("token"))).toBe(false);
@@ -130,13 +162,33 @@ describe("shortcut routes", () => {
     expect(body).not.toContain("tokenHash");
     mocks.authorizeHouseholdRequest.mockResolvedValue({ response: new Response(null, { status: 401 }) });
     expect((await GET(new Request("https://gatey.test/api/shortcuts"))).status).toBe(401);
-    expect((await POST(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }))).status).toBe(401);
+    expect(
+      (
+        await POST(
+          new Request("https://gatey.test/api/shortcuts", {
+            method: "POST",
+            headers: { origin: "https://gatey.test" },
+          }),
+        )
+      ).status,
+    ).toBe(401);
   });
 
   it("disconnects a directly issued key through the UI API", async () => {
-    const response = await POST(new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }));
+    const response = await POST(
+      new Request("https://gatey.test/api/shortcuts", { method: "POST", headers: { origin: "https://gatey.test" } }),
+    );
     const { token } = await response.json();
-    expect((await DELETE(new Request("https://gatey.test/api/shortcuts", { method: "DELETE", headers: { origin: "https://gatey.test" } }))).status).toBe(200);
+    expect(
+      (
+        await DELETE(
+          new Request("https://gatey.test/api/shortcuts", {
+            method: "DELETE",
+            headers: { origin: "https://gatey.test" },
+          }),
+        )
+      ).status,
+    ).toBe(200);
     expect(claimShortcutOpen(token).state).toBe("unauthorized");
   });
 });

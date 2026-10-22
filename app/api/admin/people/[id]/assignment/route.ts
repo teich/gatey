@@ -11,13 +11,15 @@ export const runtime = "nodejs";
 function cleanText(value: unknown, field: string, minimum = 1, maximum = 80) {
   if (typeof value !== "string") throw new Error(`${field} is required.`);
   const cleaned = value.trim();
-  if (cleaned.length < minimum || cleaned.length > maximum) throw new Error(`${field} must be between ${minimum} and ${maximum} characters.`);
+  if (cleaned.length < minimum || cleaned.length > maximum)
+    throw new Error(`${field} must be between ${minimum} and ${maximum} characters.`);
   return cleaned;
 }
 
 async function ensureMembership(userId: string, householdId: string) {
   const currentHousehold = getUserHousehold(userId);
-  if (currentHousehold && currentHousehold.id !== householdId) throw new Error(`This account already belongs to ${currentHousehold.name}.`);
+  if (currentHousehold && currentHousehold.id !== householdId)
+    throw new Error(`This account already belongs to ${currentHousehold.name}.`);
   if (!currentHousehold) {
     await auth.api.addMember({ body: { userId, organizationId: householdId, role: "member" } });
   }
@@ -29,13 +31,20 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
 
   try {
     const { id } = await context.params;
-    const body = await request.json() as { householdId?: unknown; accountId?: unknown; name?: unknown; email?: unknown; username?: unknown };
+    const body = (await request.json()) as {
+      householdId?: unknown;
+      accountId?: unknown;
+      name?: unknown;
+      email?: unknown;
+      username?: unknown;
+    };
     const householdId = cleanText(body.householdId, "Household", 1, 128);
     const household = listHouseholds().find((item) => item.id === householdId);
     if (!household) return Response.json({ error: "Household not found." }, { status: 404 });
 
     const existingLink = getPersonLink(id);
-    if (existingLink?.householdId) return Response.json({ error: `This person already belongs to ${existingLink.householdName}.` }, { status: 409 });
+    if (existingLink?.householdId)
+      return Response.json({ error: `This person already belongs to ${existingLink.householdName}.` }, { status: 409 });
     if (existingLink) {
       await ensureMembership(existingLink.userId, householdId);
       assignPersonRecords(id, householdId);
@@ -47,7 +56,8 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
 
     if (typeof body.accountId === "string" && body.accountId) {
       const account = listAssignableAccounts().find((item) => item.id === body.accountId);
-      if (!account) return Response.json({ error: "That Gatey account is no longer available to link." }, { status: 409 });
+      if (!account)
+        return Response.json({ error: "That Gatey account is no longer available to link." }, { status: 409 });
       await ensureMembership(account.id, householdId);
       linkUnifiPerson(id, account.id);
       assignPersonRecords(id, householdId);
@@ -61,7 +71,10 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
     const existingUser = contactEmail ? getUserByEmail(contactEmail) : null;
     if (existingUser) {
       if (!listAssignableAccounts().some((item) => item.id === existingUser.id)) {
-        return Response.json({ error: "That Gatey account is already linked to another UniFi person." }, { status: 409 });
+        return Response.json(
+          { error: "That Gatey account is already linked to another UniFi person." },
+          { status: 409 },
+        );
       }
       await ensureMembership(existingUser.id, householdId);
       linkUnifiPerson(id, existingUser.id);
@@ -83,12 +96,24 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/p
       throw error;
     }
 
-    return Response.json({
-      account: { id: created.user.id, name, email: contactEmail, username },
-      household,
-      welcomeMessage: buildWelcomeMessage({ householdName: household.name, name, email: contactEmail, username, password }),
-    }, { status: 201 });
+    return Response.json(
+      {
+        account: { id: created.user.id, name, email: contactEmail, username },
+        household,
+        welcomeMessage: buildWelcomeMessage({
+          householdName: household.name,
+          name,
+          email: contactEmail,
+          username,
+          password,
+        }),
+      },
+      { status: 201 },
+    );
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Could not assign this person." }, { status: 400 });
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Could not assign this person." },
+      { status: 400 },
+    );
   }
 }

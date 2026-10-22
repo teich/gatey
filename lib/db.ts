@@ -5,7 +5,10 @@ import type { Credential, CredentialState } from "@/lib/credentials";
 import { database } from "@/lib/database";
 import { credentials, personPins, visitorHouseholds, visitorPins } from "@/lib/schema";
 
-type CredentialRow = Pick<typeof credentials.$inferSelect, "id" | "label" | "pin" | "startsAt" | "endsAt" | "state" | "revokedAt">;
+type CredentialRow = Pick<
+  typeof credentials.$inferSelect,
+  "id" | "label" | "pin" | "startsAt" | "endsAt" | "state" | "revokedAt"
+>;
 
 export type HouseholdPermanentCode = {
   id: string;
@@ -41,28 +44,43 @@ function mapCredential(row: CredentialRow): Credential {
 }
 
 export function listCredentials(householdId: string): Credential[] {
-  const rows = database.select({
-    id: credentials.id,
-    label: credentials.label,
-    pin: credentials.pin,
-    startsAt: credentials.startsAt,
-    endsAt: credentials.endsAt,
-    state: credentials.state,
-    revokedAt: credentials.revokedAt,
-  }).from(credentials).where(eq(credentials.householdId, householdId))
-    .orderBy(desc(credentials.startsAt), desc(credentials.createdAt)).all();
+  const rows = database
+    .select({
+      id: credentials.id,
+      label: credentials.label,
+      pin: credentials.pin,
+      startsAt: credentials.startsAt,
+      endsAt: credentials.endsAt,
+      state: credentials.state,
+      revokedAt: credentials.revokedAt,
+    })
+    .from(credentials)
+    .where(eq(credentials.householdId, householdId))
+    .orderBy(desc(credentials.startsAt), desc(credentials.createdAt))
+    .all();
   return rows.map(mapCredential);
 }
 
 export function listCredentialUsageLookups(householdId: string): CredentialUsageLookup[] {
-  return database.select({ id: credentials.id, controllerVisitorId: credentials.controllerVisitorId, startsAt: credentials.startsAt, endsAt: credentials.endsAt })
-    .from(credentials).where(eq(credentials.householdId, householdId)).all();
+  return database
+    .select({
+      id: credentials.id,
+      controllerVisitorId: credentials.controllerVisitorId,
+      startsAt: credentials.startsAt,
+      endsAt: credentials.endsAt,
+    })
+    .from(credentials)
+    .where(eq(credentials.householdId, householdId))
+    .all();
 }
 
 export function listHouseholdPermanentCodes(householdId: string): HouseholdPermanentCode[] {
-  return database.select({ id: personPins.controllerUserId, label: personPins.label, pin: personPins.pin })
-    .from(personPins).where(eq(personPins.householdId, householdId))
-    .orderBy(asc(personPins.replacedAt), sql`${personPins.label} collate nocase`).all();
+  return database
+    .select({ id: personPins.controllerUserId, label: personPins.label, pin: personPins.pin })
+    .from(personPins)
+    .where(eq(personPins.householdId, householdId))
+    .orderBy(asc(personPins.replacedAt), sql`${personPins.label} collate nocase`)
+    .all();
 }
 
 export function managedVisitorPins(): Map<string, string> {
@@ -75,21 +93,53 @@ export function managedVisitorPins(): Map<string, string> {
 
 export function saveVisitorPin(input: { householdId: string; visitorId: string; label: string; pin: string }) {
   const replacedAt = new Date().toISOString();
-  database.transaction((tx) => {
-    const pinValues = { controllerVisitorId: input.visitorId, householdId: input.householdId, label: input.label, pin: input.pin, replacedAt };
-    tx.insert(visitorPins).values(pinValues).onConflictDoUpdate({ target: visitorPins.controllerVisitorId, set: pinValues }).run();
-    tx.update(credentials).set({ pin: input.pin }).where(and(eq(credentials.controllerVisitorId, input.visitorId), eq(credentials.householdId, input.householdId))).run();
-    tx.insert(visitorHouseholds).values({ controllerVisitorId: input.visitorId, householdId: input.householdId, assignedAt: replacedAt })
-      .onConflictDoUpdate({ target: visitorHouseholds.controllerVisitorId, set: { householdId: input.householdId } }).run();
-  }, { behavior: "immediate" });
+  database.transaction(
+    (tx) => {
+      const pinValues = {
+        controllerVisitorId: input.visitorId,
+        householdId: input.householdId,
+        label: input.label,
+        pin: input.pin,
+        replacedAt,
+      };
+      tx.insert(visitorPins)
+        .values(pinValues)
+        .onConflictDoUpdate({ target: visitorPins.controllerVisitorId, set: pinValues })
+        .run();
+      tx.update(credentials)
+        .set({ pin: input.pin })
+        .where(
+          and(eq(credentials.controllerVisitorId, input.visitorId), eq(credentials.householdId, input.householdId)),
+        )
+        .run();
+      tx.insert(visitorHouseholds)
+        .values({ controllerVisitorId: input.visitorId, householdId: input.householdId, assignedAt: replacedAt })
+        .onConflictDoUpdate({ target: visitorHouseholds.controllerVisitorId, set: { householdId: input.householdId } })
+        .run();
+    },
+    { behavior: "immediate" },
+  );
 }
 
 export function managedPersonPins(): Map<string, string> {
-  const rows = database.select({ controllerUserId: personPins.controllerUserId, pin: personPins.pin }).from(personPins).all();
+  const rows = database
+    .select({ controllerUserId: personPins.controllerUserId, pin: personPins.pin })
+    .from(personPins)
+    .all();
   return new Map(rows.map((row) => [row.controllerUserId, row.pin]));
 }
 
 export function savePersonPin(input: { householdId: string; userId: string; label: string; pin: string }) {
-  const values = { controllerUserId: input.userId, householdId: input.householdId, label: input.label, pin: input.pin, replacedAt: new Date().toISOString() };
-  database.insert(personPins).values(values).onConflictDoUpdate({ target: personPins.controllerUserId, set: values }).run();
+  const values = {
+    controllerUserId: input.userId,
+    householdId: input.householdId,
+    label: input.label,
+    pin: input.pin,
+    replacedAt: new Date().toISOString(),
+  };
+  database
+    .insert(personPins)
+    .values(values)
+    .onConflictDoUpdate({ target: personPins.controllerUserId, set: values })
+    .run();
 }

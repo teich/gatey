@@ -1,5 +1,11 @@
 import { listGateCodes } from "@/lib/gate-codes";
-import { createGateCode, GateCodeInputError, gateCodeErrorResponse, isGateCodeKind, parseGateCodePin } from "@/lib/gate-code-service";
+import {
+  createGateCode,
+  GateCodeInputError,
+  gateCodeErrorResponse,
+  isGateCodeKind,
+  parseGateCodePin,
+} from "@/lib/gate-code-service";
 import { authorizeHouseholdRequest } from "@/lib/api-authorization";
 import { recordAuditEvent } from "@/lib/audit-log";
 import { listGateCodeUsageSummaries } from "@/lib/access-history";
@@ -31,11 +37,25 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const authorization = await authorizeHouseholdRequest(request);
   if (authorization.response) return authorization.response;
-  const { session: { user }, household } = authorization.context;
-  const audit = { actorUserId: user.id, actorName: user.name || "Gatey resident", householdId: household.id, householdName: household.name };
+  const {
+    session: { user },
+    household,
+  } = authorization.context;
+  const audit = {
+    actorUserId: user.id,
+    actorName: user.name || "Gatey resident",
+    householdId: household.id,
+    householdName: household.name,
+  };
 
   try {
-    const body = await request.json() as { label?: unknown; pin?: unknown; kind?: unknown; startsAt?: unknown; endsAt?: unknown };
+    const body = (await request.json()) as {
+      label?: unknown;
+      pin?: unknown;
+      kind?: unknown;
+      startsAt?: unknown;
+      endsAt?: unknown;
+    };
     const kind = body.kind;
     const label = typeof body.label === "string" ? body.label.trim().slice(0, 80) : "";
     if (!isGateCodeKind(kind) || !label) throw new GateCodeInputError("Choose a name and type for this code.");

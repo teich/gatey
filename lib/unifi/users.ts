@@ -30,14 +30,17 @@ const userPath = (userId: string) => `/users/${encodeURIComponent(userId)}`;
 
 export async function listUserInventory(): Promise<UserInventoryItem[]> {
   const users = await request<UnifiUser[]>("/users?page_num=1&page_size=100&expand[]=access_policy");
-  return users.map((user) => ({
-    id: user.id,
-    name: user.full_name || user.alias || [user.first_name, user.last_name].filter(Boolean).join(" ") || "Unnamed person",
-    status: user.status || "UNKNOWN",
-    hasPin: Boolean(user.pin_code?.token),
-    policyNames: (user.access_policies || []).map((policy) => policy.name || "Unnamed policy"),
-    hasNfcCard: Boolean(user.nfc_cards?.length),
-  })).sort((left, right) => left.name.localeCompare(right.name));
+  return users
+    .map((user) => ({
+      id: user.id,
+      name:
+        user.full_name || user.alias || [user.first_name, user.last_name].filter(Boolean).join(" ") || "Unnamed person",
+      status: user.status || "UNKNOWN",
+      hasPin: Boolean(user.pin_code?.token),
+      policyNames: (user.access_policies || []).map((policy) => policy.name || "Unnamed policy"),
+      hasNfcCard: Boolean(user.nfc_cards?.length),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export async function listAccessPolicies(): Promise<AccessPolicyOption[]> {
@@ -45,11 +48,19 @@ export async function listAccessPolicies(): Promise<AccessPolicyOption[]> {
   return policies.map(({ id, name }) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function createUnifiPerson(input: { firstName: string; lastName: string; email: string | null }): Promise<string> {
+export async function createUnifiPerson(input: {
+  firstName: string;
+  lastName: string;
+  email: string | null;
+}): Promise<string> {
   assertControllerChangesAllowed();
   const person = await request<{ id: string }>("/users", {
     method: "POST",
-    ...jsonBody({ first_name: input.firstName, last_name: input.lastName, ...(input.email ? { user_email: input.email } : {}) }),
+    ...jsonBody({
+      first_name: input.firstName,
+      last_name: input.lastName,
+      ...(input.email ? { user_email: input.email } : {}),
+    }),
   });
   if (!person?.id) throw new Error("UniFi did not return the new person's ID.");
   return person.id;
@@ -57,7 +68,10 @@ export async function createUnifiPerson(input: { firstName: string; lastName: st
 
 export async function assignUserAccessPolicy(userId: string, policyId: string) {
   assertControllerChangesAllowed();
-  await request<null>(`${userPath(userId)}/access_policies`, { method: "PUT", ...jsonBody({ access_policy_ids: [policyId] }) });
+  await request<null>(`${userPath(userId)}/access_policies`, {
+    method: "PUT",
+    ...jsonBody({ access_policy_ids: [policyId] }),
+  });
 }
 
 export async function replaceUserPin(userId: string, requestedPin?: string): Promise<string> {
