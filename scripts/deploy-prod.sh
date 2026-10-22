@@ -83,7 +83,9 @@ if [[ -d "$build_root/public" ]]; then
 fi
 
 artifact="$deploy_temp/gatey-$short_commit.tar.gz"
-tar -C "$build_root" -czf "$artifact" .next/standalone
+# macOS tar would otherwise embed extended attributes (com.apple.provenance)
+# that the server's GNU tar warns about for every file.
+COPYFILE_DISABLE=1 tar --no-xattrs -C "$build_root" -czf "$artifact" .next/standalone
 remote_artifact="/tmp/gatey-$short_commit.tar.gz"
 
 echo "Uploading the build to ${prod_host}…"
