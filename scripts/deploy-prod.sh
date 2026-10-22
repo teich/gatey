@@ -4,7 +4,9 @@ set -euo pipefail
 
 prod_host="${GATEY_PROD_HOST:-root@192.168.2.93}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-deploy_temp="$(mktemp -d /tmp/gatey-deploy.XXXXXX)"
+# Resolve symlinks (macOS /tmp is /private/tmp): npm 11.20 `ci --prefix` through
+# a symlinked path mistakes the project root for a linked package.
+deploy_temp="$(cd "$(mktemp -d /tmp/gatey-deploy.XXXXXX)" && pwd -P)"
 
 cleanup() {
   rm -rf "$deploy_temp"
