@@ -4,17 +4,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { recordAuditEvent } from "@/lib/audit-log";
 import { findAuthorizedPhoneCaller, type AuthorizedPhoneCaller } from "@/lib/phone-access";
 import { startPhoneHold } from "@/lib/party-mode";
-import { beginTwilioAction, finishTwilioAction, recordTwilioEvent, recoverPendingTwilioActions, type TwilioAction } from "@/lib/twilio-activity";
+import { beginTwilioAction, finishTwilioAction, recordTwilioEvent, type TwilioAction } from "@/lib/twilio-activity";
 import { unlockGate } from "@/lib/unifi-access";
 
 const HOLD_OPEN_MINUTES = 30;
 const MAX_BODY_BYTES = 16_384;
-const globalForTwilio = globalThis as unknown as { gateyTwilioRecovered?: boolean };
-
-if (!globalForTwilio.gateyTwilioRecovered) {
-  recoverPendingTwilioActions();
-  globalForTwilio.gateyTwilioRecovered = true;
-}
 
 function escapeXml(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");

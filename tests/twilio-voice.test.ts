@@ -7,7 +7,6 @@ const dependencies = vi.hoisted(() => ({
   beginTwilioAction: vi.fn(),
   finishTwilioAction: vi.fn(),
   recordTwilioEvent: vi.fn(),
-  recoverPendingTwilioActions: vi.fn(() => 0),
   unlockGate: vi.fn(),
   recordAuditEvent: vi.fn(),
 }));
@@ -18,7 +17,6 @@ vi.mock("@/lib/twilio-activity", () => ({
   beginTwilioAction: dependencies.beginTwilioAction,
   finishTwilioAction: dependencies.finishTwilioAction,
   recordTwilioEvent: dependencies.recordTwilioEvent,
-  recoverPendingTwilioActions: dependencies.recoverPendingTwilioActions,
 }));
 vi.mock("@/lib/unifi-access", () => ({ unlockGate: dependencies.unlockGate }));
 vi.mock("@/lib/audit-log", () => ({ recordAuditEvent: dependencies.recordAuditEvent }));

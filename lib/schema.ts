@@ -60,7 +60,6 @@ export const session = table("session", {
 
 export const account = table("account", {
   id: text().primaryKey(),
-  issuer: text().notNull(),
   accountId: text().notNull(),
   providerId: text().notNull(),
   userId: text().notNull().references(() => user.id, { onDelete: "cascade" }),
@@ -75,7 +74,6 @@ export const account = table("account", {
   updatedAt: timestamp().notNull(),
 }, (t) => [
   index("account_user_id_idx").on(t.userId),
-  uniqueIndex("account_issuer_account_id_uidx").on(t.issuer, t.accountId),
 ]);
 
 export const verification = table("verification", {
